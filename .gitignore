@@ -41,6 +41,7 @@ Thumbs.db
 *.pem
 .vscode/
 .idea/
+.playwright-mcp/
 
 # Debug logs
 *.log
@@ -52,6 +53,7 @@ yarn-error.log*
 # Environment files
 .env*
 !.env.example
+!**/.env.example
 
 # Vercel
 .vercel

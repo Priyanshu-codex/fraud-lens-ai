@@ -1,14 +1,36 @@
+import Link from "next/link";
+
 interface ErrorStateProps {
   title?: string;
   message: string;
   onRetry?: () => void;
+  apiStatus?: string;
+  modelStatus?: string;
+  databaseStatus?: string;
 }
 
 export function ErrorState({
-  title = "Something went wrong",
+  title,
   message,
   onRetry,
+  apiStatus = "Offline",
+  modelStatus = "Unknown",
+  databaseStatus = "Unknown",
 }: ErrorStateProps) {
+  const isConnectionError =
+    message.includes("Unable to connect") ||
+    message.includes("Failed to fetch") ||
+    message.includes("Connection failed") ||
+    message.includes("NetworkError");
+
+  const displayTitle = isConnectionError
+    ? "FraudLens AI Service Unavailable"
+    : title || "Something went wrong";
+
+  const displaySubtitle = isConnectionError
+    ? "Unable to reach the analysis service."
+    : message;
+
   return (
     <div
       style={{
@@ -16,15 +38,17 @@ export function ErrorState({
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        padding: "3rem 2rem",
+        padding: "3.5rem 2rem",
         textAlign: "center",
-        gap: "1rem",
+        maxWidth: "480px",
+        margin: "0 auto",
+        gap: "1.25rem",
       }}
     >
       <div
         style={{
-          width: "48px",
-          height: "48px",
+          width: "52px",
+          height: "52px",
           borderRadius: "50%",
           backgroundColor: "var(--color-risk-high-bg)",
           display: "flex",
@@ -34,8 +58,8 @@ export function ErrorState({
         }}
       >
         <svg
-          width="22"
-          height="22"
+          width="24"
+          height="24"
           viewBox="0 0 24 24"
           fill="none"
           stroke="var(--color-risk-high)"
@@ -48,32 +72,70 @@ export function ErrorState({
           <line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
       </div>
+
       <div>
         <div
           style={{
-            fontWeight: 600,
-            fontSize: "0.9375rem",
+            fontWeight: 700,
+            fontSize: "1.125rem",
             color: "var(--color-text-primary)",
-            marginBottom: "0.375rem",
+            marginBottom: "0.5rem",
+            letterSpacing: "-0.01em",
           }}
         >
-          {title}
+          {displayTitle}
         </div>
         <div
           style={{
             fontSize: "0.875rem",
             color: "var(--color-text-secondary)",
-            maxWidth: "320px",
+            lineHeight: 1.5,
           }}
         >
-          {message}
+          {displaySubtitle}
         </div>
       </div>
-      {onRetry && (
-        <button className="btn btn-secondary btn-sm" onClick={onRetry}>
-          Retry
-        </button>
+
+      {isConnectionError && (
+        <div
+          style={{
+            width: "100%",
+            background: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-lg)",
+            padding: "1rem 1.25rem",
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.5rem",
+            fontSize: "0.8125rem",
+            textAlign: "left",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ color: "var(--color-text-tertiary)" }}>API Status:</span>
+            <span style={{ fontWeight: 600, color: "var(--color-risk-high)" }}>{apiStatus}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ color: "var(--color-text-tertiary)" }}>Model Status:</span>
+            <span style={{ fontWeight: 600, color: "var(--color-text-secondary)" }}>{modelStatus}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ color: "var(--color-text-tertiary)" }}>Database Status:</span>
+            <span style={{ fontWeight: 600, color: "var(--color-text-secondary)" }}>{databaseStatus}</span>
+          </div>
+        </div>
       )}
+
+      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", justifyContent: "center" }}>
+        {onRetry && (
+          <button className="btn btn-primary btn-sm" onClick={onRetry}>
+            Retry Connection
+          </button>
+        )}
+        <Link href="/settings" className="btn btn-secondary btn-sm">
+          Open System Health
+        </Link>
+      </div>
     </div>
   );
 }

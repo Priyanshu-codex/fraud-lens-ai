@@ -4,7 +4,19 @@
  * Never mock or hardcode values — everything comes from the real FastAPI backend.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const rawBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const API_BASE = rawBase.replace(/\/+$/, "");
+
+export class ApiError extends Error {
+  status?: number;
+  isConnectionError?: boolean;
+  constructor(message: string, status?: number, isConnectionError = false) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.isConnectionError = isConnectionError;
+  }
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -39,6 +51,7 @@ export interface TransactionInput {
   V27: number;
   V28: number;
   Amount: number;
+  source?: string;
 }
 
 export interface PredictionResponse {
@@ -48,6 +61,8 @@ export interface PredictionResponse {
   threshold: number;
   model_version: string;
   model_name: string;
+  analysis_id?: string;
+  investigation_id?: string;
 }
 
 export interface FeatureContribution {
@@ -62,12 +77,79 @@ export interface ExplainResponse extends PredictionResponse {
   disclaimer: string;
 }
 
+export interface AnalysisDetail {
+  id: string;
+  transaction_id: string;
+  fraud_probability: number;
+  prediction: "FRAUD" | "LEGITIMATE";
+  risk_level: "LOW" | "REVIEW" | "HIGH";
+  threshold: number;
+  model_name: string;
+  model_version: string;
+  created_at: string;
+  source: string;
+  amount: number;
+  time: number;
+  features: Record<string, number>;
+  evidence: FeatureContribution[];
+  investigation_id?: string;
+  investigation_status?: string;
+}
+
+export interface InvestigationRecord {
+  id: string;
+  analysis_id: string;
+  status: "OPEN" | "UNDER_REVIEW" | "RESOLVED";
+  notes?: string | null;
+  reviewed_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  analysis?: AnalysisDetail | null;
+}
+
+export interface InvestigationUpdateInput {
+  status?: "OPEN" | "UNDER_REVIEW" | "RESOLVED";
+  notes?: string;
+  reviewed_by?: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  transaction_id: string;
+  analysis_id: string;
+  investigation_id?: string | null;
+  fraud_probability: number;
+  risk_level: "HIGH" | "REVIEW" | "LOW";
+  title: string;
+  message?: string | null;
+  is_read: boolean;
+  created_at: string;
+  read_at?: string | null;
+  amount?: number | null;
+  source?: string | null;
+}
+
+export interface NotificationListResponse {
+  items: NotificationItem[];
+  unread_count: number;
+  total_count: number;
+}
+
+
 export interface HealthResponse {
   status: string;
+  api?: string;
+  model?: string;
+  preprocessing?: string;
+  shap?: string;
+  database?: string;
   model_loaded: boolean;
   model_version: string;
   model_name: string;
   timestamp: string;
+  database_connected?: boolean;
+  preprocessing_loaded?: boolean;
+  shap_ready?: boolean;
 }
 
 export interface AnalyticsResponse {
@@ -183,6 +265,11 @@ async function apiFetch<T>(
   }
 }
 
+// ── Cached promises for static metadata ─────────────────────────────────────
+let analyticsCache: Promise<AnalyticsResponse> | null = null;
+let modelInfoCache: Promise<ModelInfoResponse> | null = null;
+let samplesCache: Promise<SamplesResponse> | null = null;
+
 // ── API functions ──────────────────────────────────────────────────────────────
 
 export const api = {
@@ -200,18 +287,81 @@ export const api = {
       body: JSON.stringify(transaction),
     }),
 
-  analytics: () => apiFetch<AnalyticsResponse>("/analytics"),
-
-  modelInfo: () => apiFetch<ModelInfoResponse>("/model-info"),
-
-  samples: async (): Promise<SamplesResponse> => {
-    try {
-      return await apiFetch<SamplesResponse>("/samples");
-    } catch {
-      // Fallback to static sample file in public folder (same genuine dataset samples)
-      const res = await fetch("/sample_transactions.json");
-      if (!res.ok) throw new Error("Could not load sample transactions");
-      return res.json() as Promise<SamplesResponse>;
+  analytics: (force = false): Promise<AnalyticsResponse> => {
+    if (!analyticsCache || force) {
+      analyticsCache = apiFetch<AnalyticsResponse>("/analytics").catch((err) => {
+        analyticsCache = null;
+        throw err;
+      });
     }
+    return analyticsCache;
   },
+
+  modelInfo: (force = false): Promise<ModelInfoResponse> => {
+    if (!modelInfoCache || force) {
+      modelInfoCache = apiFetch<ModelInfoResponse>("/model-info").catch((err) => {
+        modelInfoCache = null;
+        throw err;
+      });
+    }
+    return modelInfoCache;
+  },
+
+  samples: (force = false): Promise<SamplesResponse> => {
+    if (!samplesCache || force) {
+      samplesCache = (async () => {
+        try {
+          return await apiFetch<SamplesResponse>("/samples");
+        } catch {
+          // Fallback to static sample file in public folder (same genuine dataset samples)
+          const res = await fetch("/sample_transactions.json");
+          if (!res.ok) throw new Error("Could not load sample transactions");
+          return res.json() as Promise<SamplesResponse>;
+        }
+      })().catch((err) => {
+        samplesCache = null;
+        throw err;
+      });
+    }
+    return samplesCache;
+  },
+
+  listInvestigations: (status?: string, limit: number = 50) =>
+    apiFetch<InvestigationRecord[]>(
+      `/investigations${status ? `?status=${status}&limit=${limit}` : `?limit=${limit}`}`
+    ),
+
+  getInvestigation: (id: string) =>
+    apiFetch<InvestigationRecord>(`/investigations/${id}`),
+
+  getInvestigationByAnalysis: (analysisId: string) =>
+    apiFetch<InvestigationRecord>(`/investigations/by-analysis/${analysisId}`),
+
+  updateInvestigation: (id: string, update: InvestigationUpdateInput) =>
+    apiFetch<InvestigationRecord>(`/investigations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(update),
+    }),
+
+  listAnalyses: (limit: number = 50) =>
+    apiFetch<AnalysisDetail[]>(`/analyses?limit=${limit}`),
+
+  getAnalysis: (id: string) =>
+    apiFetch<AnalysisDetail>(`/analyses/${id}`),
+
+  listNotifications: (unreadOnly?: boolean, limit: number = 50) =>
+    apiFetch<NotificationListResponse>(
+      `/notifications${unreadOnly ? `?unread_only=true&limit=${limit}` : `?limit=${limit}`}`
+    ),
+
+  markNotificationAsRead: (id: string) =>
+    apiFetch<NotificationItem>(`/notifications/${id}/read`, {
+      method: "PATCH",
+    }),
+
+  markAllNotificationsAsRead: () =>
+    apiFetch<{ status: string; marked_count: number }>("/notifications/mark-all-read", {
+      method: "POST",
+    }),
 };
+

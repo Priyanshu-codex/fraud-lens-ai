@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { motion, useInView } from "framer-motion";
 
 /* ─── Hero Canvas Animation ────────────────────────────────────────────────── */
@@ -14,8 +14,6 @@ function SignalCanvas() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    // non-null assertion so inner draw() function can use ctx safely
-    const c2d = ctx;
 
     const dpr = window.devicePixelRatio || 1;
     const resize = () => {
@@ -384,9 +382,6 @@ function StatsCarouselCard({ item }: { item: (typeof STATS_ITEMS)[0] }) {
 
 /* ─── Main Page ────────────────────────────────────────────────────────────── */
 export default function LandingPage() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
   const heroRef = useRef(null);
 
   const features = [
@@ -526,12 +521,11 @@ export default function LandingPage() {
         >
           {/* Left: Text */}
           <div>
-            {mounted && (
-              <motion.div
-                initial={{ opacity: 0, y: 32 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-              >
+            <motion.div
+              initial={{ opacity: 0, y: 32 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            >
                 {/* Badge */}
                 <div className="hero-badge" style={{ marginBottom: "1.75rem", display: "inline-flex" }}>
                   <div
@@ -585,15 +579,13 @@ export default function LandingPage() {
                   </Link>
                 </div>
               </motion.div>
-            )}
           </div>
 
           {/* Right: Canvas visualization */}
-          {mounted && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.8, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
               style={{
                 position: "relative",
                 height: "480px",
@@ -682,7 +674,6 @@ export default function LandingPage() {
                 Detection Active
               </div>
             </motion.div>
-          )}
         </div>
       </section>
 

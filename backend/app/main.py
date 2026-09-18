@@ -17,8 +17,12 @@ from .api.predict import router as predict_router
 from .api.explain import router as explain_router
 from .api.analytics import router as analytics_router
 from .api.model_info import router as model_info_router
+from .api.investigations import router as investigations_router
+from .api.analyses import router as analyses_router
+from .api.notifications import router as notifications_router
 from .config import settings
 from .ml.loader import artifacts
+from .services.supabase import check_supabase_connection
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,8 +33,17 @@ log = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load model artifacts on startup."""
+    """Load model artifacts and initialize Supabase connection on startup."""
     log.info("FraudLens AI backend starting up...")
+    
+    # Verify Supabase database readiness
+    supabase_ok = check_supabase_connection()
+    if supabase_ok:
+        log.info("Supabase PostgreSQL connected successfully.")
+    else:
+        log.info("Supabase operating in offline/unconfigured mode (ML inference remains fully functional).")
+
+    # Load ML artifacts
     success = artifacts.load()
     if success:
         log.info(
@@ -60,16 +73,25 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[o for o in settings.ALLOWED_ORIGINS if o],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
-# Routers
-app.include_router(health_router, prefix="/api")
-app.include_router(predict_router, prefix="/api")
-app.include_router(explain_router, prefix="/api")
-app.include_router(analytics_router, prefix="/api")
-app.include_router(model_info_router, prefix="/api")
+# Routers — Mounted at both root and /api prefix so all URL configurations resolve cleanly
+routers = [
+    health_router,
+    predict_router,
+    explain_router,
+    analytics_router,
+    model_info_router,
+    investigations_router,
+    analyses_router,
+    notifications_router,
+]
+
+for r in routers:
+    app.include_router(r)
+    app.include_router(r, prefix="/api")
 
 
 @app.get("/", tags=["Root"])

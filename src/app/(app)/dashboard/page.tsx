@@ -1,14 +1,20 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { motion, type Variants } from "framer-motion";
 import { Header } from "@/components/layout/Header";
 import { useMobileMenu } from "@/app/(app)/layout";
 import { RiskBadge } from "@/components/ui/RiskBadge";
 import { MetricSkeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { api, type AnalyticsResponse, type ModelInfoResponse } from "@/lib/api";
-import { formatNumber } from "@/lib/utils";
+import {
+  api,
+  type AnalyticsResponse,
+  type ModelInfoResponse,
+  type InvestigationRecord,
+} from "@/lib/api";
+import { formatNumber, formatCurrencyINR } from "@/lib/utils";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, Cell, LineChart, Line, Legend,
@@ -17,6 +23,7 @@ import {
 export default function DashboardPage() {
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
   const [modelInfo, setModelInfo] = useState<ModelInfoResponse | null>(null);
+  const [investigations, setInvestigations] = useState<InvestigationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { onMenuToggle } = useMobileMenu();
@@ -25,9 +32,14 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const [a, m] = await Promise.all([api.analytics(), api.modelInfo()]);
+      const [a, m, invs] = await Promise.all([
+        api.analytics(),
+        api.modelInfo(),
+        api.listInvestigations().catch(() => [] as InvestigationRecord[]),
+      ]);
       setAnalytics(a);
       setModelInfo(m);
+      setInvestigations(invs);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load dashboard data");
     } finally {
@@ -35,7 +47,35 @@ export default function DashboardPage() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    let ignore = false;
+    async function loadInitial() {
+      try {
+        const [a, m, invs] = await Promise.all([
+          api.analytics(),
+          api.modelInfo(),
+          api.listInvestigations().catch(() => [] as InvestigationRecord[]),
+        ]);
+        if (!ignore) {
+          setAnalytics(a);
+          setModelInfo(m);
+          setInvestigations(invs);
+        }
+      } catch (e: unknown) {
+        if (!ignore) {
+          setError(e instanceof Error ? e.message : "Failed to load dashboard data");
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+    loadInitial();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
@@ -57,7 +97,7 @@ export default function DashboardPage() {
         ) : error ? (
           <ErrorState title="Unable to load intelligence data" message={error} onRetry={fetchData} />
         ) : analytics && modelInfo ? (
-          <DashboardContent analytics={analytics} modelInfo={modelInfo} />
+          <DashboardContent analytics={analytics} modelInfo={modelInfo} investigations={investigations} />
         ) : null}
       </main>
     </div>
@@ -77,9 +117,11 @@ const itemAnim: Variants = {
 function DashboardContent({
   analytics,
   modelInfo,
+  investigations,
 }: {
   analytics: AnalyticsResponse;
   modelInfo: ModelInfoResponse;
+  investigations: InvestigationRecord[];
 }) {
   const { confusion_matrix: cm } = analytics;
   const totalLegit = analytics.legitimate_transactions;
@@ -394,7 +436,7 @@ function DashboardContent({
                 tickFormatter={(v) => `${v}%`}
               />
               <Tooltip
-                formatter={(value: any, name: any) => [`${Number(value ?? 0).toFixed(2)}%`, String(name ?? "")]}
+                formatter={(value: unknown, name: unknown) => [`${Number(value ?? 0).toFixed(2)}%`, String(name ?? "")]}
                 contentStyle={{
                   background: "white",
                   border: "1px solid var(--color-border)",
@@ -541,7 +583,7 @@ function DashboardContent({
                 label={{ value: "Precision (%)", angle: -90, position: "insideLeft", offset: 12, fontSize: 11, fill: "var(--color-text-tertiary)" }}
               />
               <Tooltip
-                formatter={(v: any) => [`${Number(v ?? 0).toFixed(1)}%`, ""]}
+                formatter={(v: unknown) => [`${Number(v ?? 0).toFixed(1)}%`, ""]}
                 contentStyle={{ background: "white", border: "1px solid var(--color-border)", borderRadius: "8px", fontSize: "0.8125rem" }}
               />
               <Line
@@ -554,6 +596,131 @@ function DashboardContent({
               />
             </LineChart>
           </ResponsiveContainer>
+        </div>
+      </motion.div>
+
+      {/* ── Recent Persisted Cases & Live Ingestion Activity ─────────────── */}
+      <motion.div variants={itemAnim}>
+        <div className="card" style={{ padding: "1.375rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem", flexWrap: "wrap", gap: "0.5rem" }}>
+            <div>
+              <div className="intelligence-label">Recent Forensic Ingestion Activity</div>
+              <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+                Live transactions processed through XGBoost inference and persisted in database
+              </div>
+            </div>
+            <Link
+              href="/investigations"
+              style={{
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                color: "var(--color-brand)",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.25rem",
+              }}
+            >
+              Open Workspace →
+            </Link>
+          </div>
+
+          {investigations.length === 0 ? (
+            <div style={{ padding: "2.5rem 1rem", textAlign: "center", color: "var(--color-text-tertiary)", fontSize: "0.875rem" }}>
+              No live transactions analyzed yet. Run an analysis in the{" "}
+              <Link href="/analyze" style={{ color: "var(--color-brand)", fontWeight: 600 }}>
+                Transaction Analyzer
+              </Link>{" "}
+              to start recording persistent forensic cases.
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto", marginTop: "1rem" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8125rem" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--color-border)", textAlign: "left", color: "var(--color-text-secondary)" }}>
+                    <th style={{ padding: "0.625rem 0.75rem", fontWeight: 600 }}>Case ID</th>
+                    <th style={{ padding: "0.625rem 0.75rem", fontWeight: 600 }}>Amount</th>
+                    <th style={{ padding: "0.625rem 0.75rem", fontWeight: 600 }}>Prediction</th>
+                    <th style={{ padding: "0.625rem 0.75rem", fontWeight: 600 }}>Risk Level</th>
+                    <th style={{ padding: "0.625rem 0.75rem", fontWeight: 600 }}>Probability</th>
+                    <th style={{ padding: "0.625rem 0.75rem", fontWeight: 600 }}>Case Status</th>
+                    <th style={{ padding: "0.625rem 0.75rem", textAlign: "right", fontWeight: 600 }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {investigations.slice(0, 5).map((inv) => {
+                    const a = inv.analysis;
+                    return (
+                      <tr
+                        key={inv.id}
+                        style={{
+                          borderBottom: "1px solid var(--color-border)",
+                        }}
+                      >
+                        <td style={{ padding: "0.75rem", fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--color-text-primary)" }}>
+                          {inv.id.slice(0, 8)}
+                        </td>
+                        <td style={{ padding: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>
+                          {a ? formatCurrencyINR(a.amount) : "—"}
+                        </td>
+                        <td style={{ padding: "0.75rem", fontWeight: 700, color: a?.prediction === "FRAUD" ? "var(--color-risk-high)" : "var(--color-risk-low)" }}>
+                          {a?.prediction || "—"}
+                        </td>
+                        <td style={{ padding: "0.75rem" }}>
+                          {a ? <RiskBadge level={a.risk_level} size="sm" /> : "—"}
+                        </td>
+                        <td style={{ padding: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--color-text-secondary)" }}>
+                          {a ? `${(a.fraud_probability * 100).toFixed(2)}%` : "—"}
+                        </td>
+                        <td style={{ padding: "0.75rem" }}>
+                          <span
+                            style={{
+                              fontSize: "0.6875rem",
+                              fontWeight: 700,
+                              textTransform: "uppercase",
+                              padding: "0.2rem 0.5rem",
+                              borderRadius: "4px",
+                              letterSpacing: "0.04em",
+                              background:
+                                inv.status === "RESOLVED"
+                                  ? "var(--color-risk-low-bg)"
+                                  : inv.status === "UNDER_REVIEW"
+                                  ? "var(--color-risk-review-bg)"
+                                  : "var(--color-risk-high-bg)",
+                              color:
+                                inv.status === "RESOLVED"
+                                  ? "var(--color-risk-low)"
+                                  : inv.status === "UNDER_REVIEW"
+                                  ? "var(--color-risk-review)"
+                                  : "var(--color-risk-high)",
+                              border: `1px solid ${
+                                inv.status === "RESOLVED"
+                                  ? "var(--color-risk-low-border)"
+                                  : inv.status === "UNDER_REVIEW"
+                                  ? "var(--color-risk-review-border)"
+                                  : "var(--color-risk-high-border)"
+                              }`,
+                            }}
+                          >
+                            {inv.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: "0.75rem", textAlign: "right" }}>
+                          <Link
+                            href={`/investigations?id=${inv.id}`}
+                            className="btn btn-secondary"
+                            style={{ padding: "0.3rem 0.625rem", fontSize: "0.75rem" }}
+                          >
+                            Review Case
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </motion.div>
 
@@ -573,7 +740,7 @@ function DashboardContent({
         >
           <strong style={{ color: "var(--color-text-primary)" }}>Why PR-AUC is the primary metric:</strong>{" "}
           With only {analytics.fraud_rate.toFixed(4)}% of transactions being fraudulent, a classifier
-          predicting "legitimate" for every transaction would achieve {(100 - analytics.fraud_rate).toFixed(2)}% accuracy
+          predicting &ldquo;legitimate&rdquo; for every transaction would achieve {(100 - analytics.fraud_rate).toFixed(2)}% accuracy
           while catching zero fraud. Precision-Recall AUC measures performance specifically on the minority fraud class —
           making it far more meaningful for rare-event detection.
         </div>
