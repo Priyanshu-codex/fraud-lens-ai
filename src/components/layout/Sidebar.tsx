@@ -2,46 +2,49 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { api, type HealthResponse } from "@/lib/api";
 
 const navItems = [
   {
     href: "/dashboard",
-    label: "Overview",
-    description: "Executive summary",
+    label: "Intelligence",
+    description: "Risk overview",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="7" height="7" rx="1" />
-        <rect x="14" y="3" width="7" height="7" rx="1" />
-        <rect x="3" y="14" width="7" height="7" rx="1" />
-        <rect x="14" y="14" width="7" height="7" rx="1" />
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+        <rect x="3" y="14" width="7" height="7" rx="1.5" />
+        <rect x="14" y="14" width="7" height="7" rx="1.5" />
       </svg>
     ),
   },
   {
     href: "/analyze",
-    label: "Analyze",
-    description: "Run transaction analysis",
+    label: "Analyzer",
+    description: "Transaction analysis",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8" />
-        <path d="m21 21-4.35-4.35" />
-        <path d="M11 8v6" />
-        <path d="M8 11h6" />
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 3h18v4H3z" rx="1" />
+        <path d="M3 11h10" />
+        <path d="M3 15h7" />
+        <circle cx="18" cy="16" r="4" />
+        <path d="m21 19-1.5-1.5" />
       </svg>
     ),
   },
   {
     href: "/investigations",
-    label: "Investigations",
-    description: "Detailed review",
+    label: "Investigation",
+    description: "Forensic workspace",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
         <polyline points="14 2 14 8 20 8" />
         <line x1="16" y1="13" x2="8" y2="13" />
         <line x1="16" y1="17" x2="8" y2="17" />
-        <polyline points="10 9 9 9 8 9" />
+        <line x1="10" y1="9" x2="8" y2="9" />
       </svg>
     ),
   },
@@ -50,41 +53,44 @@ const navItems = [
     label: "Model Lab",
     description: "ML performance",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 3H5a2 2 0 0 0-2 2v4" />
-        <path d="M9 3h6" />
-        <path d="M9 3v18" />
-        <path d="M15 3h4a2 2 0 0 1 2 2v4" />
-        <path d="M15 3v18" />
-        <path d="M9 21H5a2 2 0 0 1-2-2v-4" />
-        <path d="M9 21h6" />
-        <path d="M15 21h4a2 2 0 0 0 2-2v-4" />
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
       </svg>
     ),
   },
   {
     href: "/settings",
     label: "System",
-    description: "Health & settings",
+    description: "Health & config",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="3" />
-        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+        <path d="M19.07 4.93A10 10 0 0 1 21.64 9h-2.05A8 8 0 0 0 12 4c-.36 0-.71.02-1.05.07M4.93 4.93A10 10 0 0 0 2.36 9h2.05A8 8 0 0 1 20 12h2a10 10 0 0 1-2.93 7.07M4.93 19.07A10 10 0 0 0 9 21.64v-2.05A8 8 0 0 1 4 12H2a10 10 0 0 0 2.93 7.07" />
       </svg>
     ),
   },
 ];
 
-export function Sidebar() {
-  const pathname = usePathname();
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}
 
-  return (
+export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
+  const pathname = usePathname();
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+
+  useEffect(() => {
+    api.health().then(setHealth).catch(() => null);
+  }, []);
+
+  const sidebarContent = (
     <aside
       style={{
-        width: "220px",
+        width: "240px",
         minHeight: "100vh",
-        backgroundColor: "var(--color-surface)",
-        borderRight: "1px solid var(--color-border)",
+        backgroundColor: "var(--color-sidebar-bg)",
+        borderRight: "1px solid var(--color-sidebar-border)",
         display: "flex",
         flexDirection: "column",
         position: "fixed",
@@ -92,25 +98,26 @@ export function Sidebar() {
         left: 0,
         bottom: 0,
         zIndex: 40,
+        boxShadow: "var(--shadow-sidebar)",
       }}
     >
       {/* Logo */}
       <div
         style={{
-          padding: "1.25rem 1.25rem 1rem",
-          borderBottom: "1px solid var(--color-border)",
+          padding: "1.375rem 1.375rem 1.125rem",
+          borderBottom: "1px solid var(--color-sidebar-border)",
         }}
       >
         <Link href="/" style={{ textDecoration: "none" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <FraudLensLogo />
             <div>
               <div
                 style={{
                   fontSize: "0.9375rem",
-                  fontWeight: 700,
-                  color: "var(--color-text-primary)",
-                  letterSpacing: "-0.01em",
+                  fontWeight: 800,
+                  color: "var(--color-sidebar-text-active)",
+                  letterSpacing: "-0.02em",
                   lineHeight: 1.2,
                 }}
               >
@@ -118,14 +125,15 @@ export function Sidebar() {
               </div>
               <div
                 style={{
-                  fontSize: "0.6875rem",
-                  color: "var(--color-text-tertiary)",
-                  fontWeight: 500,
-                  letterSpacing: "0.05em",
+                  fontSize: "0.6rem",
+                  color: "var(--color-sidebar-text)",
+                  fontWeight: 600,
+                  letterSpacing: "0.12em",
                   textTransform: "uppercase",
+                  marginTop: "1px",
                 }}
               >
-                Intelligence
+                Signal Intelligence
               </div>
             </div>
           </div>
@@ -133,71 +141,96 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav style={{ flex: 1, padding: "0.75rem 0.75rem" }}>
+      <nav style={{ flex: 1, padding: "1rem 0.75rem" }}>
         <div
           style={{
-            fontSize: "0.6875rem",
-            fontWeight: 600,
-            letterSpacing: "0.08em",
+            fontSize: "0.5875rem",
+            fontWeight: 700,
+            letterSpacing: "0.12em",
             textTransform: "uppercase",
-            color: "var(--color-text-tertiary)",
-            padding: "0.5rem 0.5rem 0.75rem",
+            color: "var(--color-sidebar-text)",
+            padding: "0.25rem 0.625rem 0.75rem",
+            opacity: 0.5,
           }}
         >
           Platform
         </div>
-        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "2px" }}>
+        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "1px" }}>
           {navItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <li key={item.href}>
-                <Link
-                  href={item.href}
-                  style={{ textDecoration: "none" }}
-                >
+                <Link href={item.href} style={{ textDecoration: "none" }} onClick={onMobileClose}>
                   <div
                     style={{
                       display: "flex",
                       alignItems: "center",
                       gap: "0.75rem",
-                      padding: "0.5rem 0.625rem",
+                      padding: "0.5625rem 0.75rem",
                       borderRadius: "6px",
-                      color: isActive ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-                      backgroundColor: isActive ? "var(--color-surface-2)" : "transparent",
+                      color: isActive
+                        ? "var(--color-sidebar-text-active)"
+                        : "var(--color-sidebar-text)",
+                      backgroundColor: isActive
+                        ? "var(--color-sidebar-active-bg)"
+                        : "transparent",
                       fontWeight: isActive ? 600 : 400,
-                      fontSize: "0.9rem",
-                      transition: "all 0.15s ease",
+                      fontSize: "0.875rem",
+                      transition: "all 0.12s ease",
                       cursor: "pointer",
                       position: "relative",
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) {
-                        (e.currentTarget as HTMLDivElement).style.backgroundColor = "var(--color-surface-2)";
-                        (e.currentTarget as HTMLDivElement).style.color = "var(--color-text-primary)";
+                        (e.currentTarget as HTMLDivElement).style.backgroundColor = "var(--color-sidebar-hover-bg)";
+                        (e.currentTarget as HTMLDivElement).style.color = "rgba(242,242,240,0.85)";
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isActive) {
                         (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent";
-                        (e.currentTarget as HTMLDivElement).style.color = "var(--color-text-secondary)";
+                        (e.currentTarget as HTMLDivElement).style.color = "var(--color-sidebar-text)";
                       }
                     }}
                   >
+                    {/* Active indicator */}
                     {isActive && (
                       <div
                         style={{
                           position: "absolute",
                           left: 0,
-                          top: "20%",
-                          bottom: "20%",
-                          width: "2px",
+                          top: "18%",
+                          bottom: "18%",
+                          width: "2.5px",
                           backgroundColor: "var(--color-brand)",
                           borderRadius: "0 2px 2px 0",
                         }}
                       />
                     )}
-                    <span style={{ opacity: isActive ? 1 : 0.7 }}>{item.icon}</span>
-                    <span>{item.label}</span>
+                    <span
+                      style={{
+                        opacity: isActive ? 1 : 0.65,
+                        color: isActive ? "var(--color-sidebar-text-active)" : undefined,
+                        transition: "opacity 0.12s ease",
+                      }}
+                    >
+                      {item.icon}
+                    </span>
+                    <div>
+                      <div>{item.label}</div>
+                      {isActive && (
+                        <div
+                          style={{
+                            fontSize: "0.6875rem",
+                            color: "var(--color-sidebar-text)",
+                            fontWeight: 400,
+                            marginTop: "1px",
+                          }}
+                        >
+                          {item.description}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </Link>
               </li>
@@ -206,15 +239,46 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      {/* Footer */}
+      {/* Footer — system status */}
       <div
         style={{
-          padding: "1rem 1.25rem",
-          borderTop: "1px solid var(--color-border)",
+          padding: "1rem 1.125rem",
+          borderTop: "1px solid var(--color-sidebar-border)",
         }}
       >
-        <div style={{ fontSize: "0.75rem", color: "var(--color-text-tertiary)", lineHeight: 1.5 }}>
-          <div style={{ fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: "2px" }}>
+        {health && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              marginBottom: "0.625rem",
+            }}
+          >
+            <div
+              className={health.model_loaded ? "status-dot-live" : undefined}
+              style={{
+                width: "6px",
+                height: "6px",
+                borderRadius: "50%",
+                background: health.model_loaded ? "#34C676" : "#F14949",
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                fontSize: "0.75rem",
+                color: health.model_loaded ? "#34C676" : "#F14949",
+                fontWeight: 600,
+                letterSpacing: "0.04em",
+              }}
+            >
+              {health.model_loaded ? "MODEL READY" : "MODEL OFFLINE"}
+            </span>
+          </div>
+        )}
+        <div style={{ fontSize: "0.6875rem", color: "var(--color-sidebar-text)", lineHeight: 1.5, opacity: 0.6 }}>
+          <div style={{ fontWeight: 600, marginBottom: "1px", opacity: 1 }}>
             FraudLens AI v1.0
           </div>
           <div>Decision Support Prototype</div>
@@ -222,23 +286,60 @@ export function Sidebar() {
       </div>
     </aside>
   );
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <div className="sidebar-desktop">{sidebarContent}</div>
+
+      {/* Mobile: slide-in drawer */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            <motion.div
+              className="sidebar-overlay open"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={onMobileClose}
+              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 39, display: "block" }}
+            />
+            <motion.div
+              initial={{ x: -240 }}
+              animate={{ x: 0 }}
+              exit={{ x: -240 }}
+              transition={{ type: "spring", stiffness: 380, damping: 38 }}
+              style={{ position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 50 }}
+            >
+              {sidebarContent}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <style>{`
+        @media (max-width: 768px) {
+          .sidebar-desktop { display: none; }
+        }
+        @media (min-width: 769px) {
+          .sidebar-desktop { display: block; }
+        }
+      `}</style>
+    </>
+  );
 }
 
 function FraudLensLogo() {
   return (
-    <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
-      <rect width="30" height="30" rx="7" fill="#0F0F0F" />
-      {/* Outer lens ring */}
-      <circle cx="15" cy="15" r="9" stroke="#C1392B" strokeWidth="1.5" fill="none" />
-      {/* Inner lens */}
-      <circle cx="15" cy="15" r="5.5" stroke="white" strokeWidth="1" fill="none" opacity="0.6" />
-      {/* Signal lines */}
-      <line x1="15" y1="6" x2="15" y2="4" stroke="#C1392B" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1="15" y1="26" x2="15" y2="24" stroke="#C1392B" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1="6" y1="15" x2="4" y2="15" stroke="#C1392B" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1="26" y1="15" x2="24" y2="15" stroke="#C1392B" strokeWidth="1.5" strokeLinecap="round" />
-      {/* Center dot */}
-      <circle cx="15" cy="15" r="2" fill="white" />
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+      <rect width="32" height="32" rx="8" fill="#141518" />
+      <circle cx="16" cy="16" r="9.5" stroke="#C1321F" strokeWidth="1.5" fill="none" />
+      <circle cx="16" cy="16" r="5.5" stroke="rgba(255,255,255,0.35)" strokeWidth="1" fill="none" />
+      <line x1="16" y1="6.5" x2="16" y2="4.5" stroke="#C1321F" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="16" y1="27.5" x2="16" y2="25.5" stroke="#C1321F" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="6.5" y1="16" x2="4.5" y2="16" stroke="#C1321F" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="27.5" y1="16" x2="25.5" y2="16" stroke="#C1321F" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="16" cy="16" r="2.5" fill="white" />
     </svg>
   );
 }
