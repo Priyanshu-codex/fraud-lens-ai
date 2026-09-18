@@ -5,7 +5,7 @@ import { motion, type Variants } from "framer-motion";
 import { Header } from "@/components/layout/Header";
 import { useMobileMenu } from "@/app/(app)/layout";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { api, type HealthResponse, type ModelInfoResponse } from "@/lib/api";
+import { api, getApiBase, type HealthResponse, type ModelInfoResponse } from "@/lib/api";
 import { formatTimestamp } from "@/lib/utils";
 
 export default function SettingsPage() {
@@ -282,10 +282,19 @@ export default function SettingsPage() {
               </div>
               <div className="card" style={{ padding: "1.5rem" }}>
                 {[
-                  { label: "Backend URL", value: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api" },
-                  { label: "Frontend Port", value: "3000" },
+                  {
+                    label: "Backend URL",
+                    value: getApiBase() || (typeof window !== "undefined" ? `${window.location.origin}/api` : "Configured via Vercel"),
+                  },
+                  {
+                    label: "Frontend Host",
+                    value: typeof window !== "undefined" ? window.location.host : "fraudlens-ai.vercel.app",
+                  },
                   { label: "API Version", value: "1.0.0" },
-                  { label: "CORS Origins", value: "localhost:3000" },
+                  {
+                    label: "Deployment Environment",
+                    value: process.env.NODE_ENV === "production" ? "Production (Vercel)" : "Development",
+                  },
                 ].map((item, i, arr) => (
                   <div
                     key={item.label}

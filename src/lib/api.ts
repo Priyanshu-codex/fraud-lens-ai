@@ -4,8 +4,30 @@
  * Never mock or hardcode values — everything comes from the real FastAPI backend.
  */
 
-const rawBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
-const API_BASE = rawBase.replace(/\/+$/, "");
+/**
+ * Resolves the backend base URL dynamically:
+ * 1. Checks NEXT_PUBLIC_API_URL environment variable (configured in Vercel project settings).
+ * 2. If running on a deployed domain without an explicit env variable, uses relative path or window origin.
+ * 3. In local development, falls back to http://127.0.0.1:8000/api.
+ */
+export function getApiBase(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (envUrl) {
+    return envUrl.replace(/\/+$/, "");
+  }
+  if (typeof window !== "undefined") {
+    const isLocalhost =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1";
+    if (!isLocalhost) {
+      // In production deployment (e.g. Vercel), default to relative /api or custom domain proxy
+      return "";
+    }
+  }
+  return "http://127.0.0.1:8000/api";
+}
+
+export const API_BASE = getApiBase();
 
 export class ApiError extends Error {
   status?: number;
@@ -231,8 +253,12 @@ async function apiFetch<T>(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+  const base = getApiBase();
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const url = base ? `${base}${normalizedPath}` : normalizedPath;
+
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(url, {
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
       ...options,
@@ -257,8 +283,23 @@ async function apiFetch<T>(
       if (err.name === "AbortError") {
         throw new Error("Analysis timed out. Please retry.");
       }
-      if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
-        throw new Error("Unable to connect to FraudLens AI service. Please check System Health.");
+      if (
+        err.message.includes("Failed to fetch") ||
+        err.message.includes("NetworkError") ||
+        err.message.includes("Load failed")
+      ) {
+        const isDeployed =
+          typeof window !== "undefined" &&
+          window.location.hostname !== "localhost" &&
+          window.location.hostname !== "127.0.0.1";
+        const hasEnv = Boolean(process.env.NEXT_PUBLIC_API_URL);
+        const hint =
+          isDeployed && !hasEnv
+            ? " (NEXT_PUBLIC_API_URL environment variable is not configured on Vercel)"
+            : "";
+        throw new Error(
+          `Unable to connect to FraudLens AI service${hint}. Please check System Health.`
+        );
       }
     }
     throw err;
