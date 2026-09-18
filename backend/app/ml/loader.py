@@ -32,6 +32,7 @@ class ModelArtifacts:
         self.sample_transactions: dict = {}
         self.loaded: bool = False
         self.load_error: str | None = None
+        self._explainer: Any = None
 
     def load(self) -> bool:
         """Load all artifacts from disk. Returns True on success."""
@@ -58,6 +59,17 @@ class ModelArtifacts:
 
             self.loaded = True
             self.load_error = None
+
+            # Pre-initialize SHAP explainer once at startup for sub-millisecond inference
+            try:
+                import shap
+                model_type = type(self.model).__name__
+                if model_type in ("XGBClassifier", "RandomForestClassifier"):
+                    self._explainer = shap.TreeExplainer(self.model)
+            except Exception as expl_exc:
+                log.warning("Deferred SHAP explainer initialization: %s", expl_exc)
+                self._explainer = None
+
             log.info(
                 "Model artifacts loaded: %s v%s",
                 self.metadata.get("model_name"),
@@ -116,29 +128,27 @@ class ModelArtifacts:
             arr_t = arr_t.toarray()
         arr_t = np.asarray(arr_t, dtype=float)
 
-        # Use TreeExplainer for tree-based models, LinearExplainer for LR
+        # Use cached explainer for sub-millisecond explanation
         model_type = type(self.model).__name__
         try:
-            if model_type in ("XGBClassifier", "RandomForestClassifier"):
-                explainer = shap.TreeExplainer(self.model)
-                shap_values = explainer(arr_t)
-                # Modern SHAP: Explanation object, .values shape (1, n_features) or (1, n_features, n_classes)
-                vals = shap_values.values
-                if vals.ndim == 3:
-                    # (samples, features, classes) -> take class 1
-                    sv = vals[0, :, 1]
-                elif vals.ndim == 2:
-                    sv = vals[0]
+            if self._explainer is None:
+                if model_type in ("XGBClassifier", "RandomForestClassifier"):
+                    self._explainer = shap.TreeExplainer(self.model)
                 else:
-                    sv = vals
+                    self._explainer = shap.LinearExplainer(self.model, arr_t)
+            explainer = self._explainer
+            shap_values = explainer(arr_t)
+            # Modern SHAP: Explanation object, .values shape (1, n_features) or (1, n_features, n_classes)
+            vals = shap_values.values
+            if vals.ndim == 3:
+                # (samples, features, classes) -> take class 1
+                sv = vals[0, :, 1]
+            elif vals.ndim == 2:
+                sv = vals[0]
             else:
-                # LinearExplainer for Logistic Regression
-                explainer = shap.LinearExplainer(self.model, arr_t)
-                shap_values = explainer(arr_t)
-                vals = shap_values.values
-                sv = vals[0] if vals.ndim == 2 else vals
+                sv = vals
         except Exception:
-            # Fallback: use legacy API
+            # Fallback: use legacy API or fresh explainer
             if model_type in ("XGBClassifier", "RandomForestClassifier"):
                 explainer = shap.TreeExplainer(self.model)
                 sv_raw = explainer.shap_values(arr_t)

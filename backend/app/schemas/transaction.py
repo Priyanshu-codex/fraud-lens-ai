@@ -35,6 +35,7 @@ class TransactionInput(BaseModel):
     V27: float
     V28: float
     Amount: float = Field(..., ge=0, description="Transaction amount (non-negative)")
+    source: str | None = Field("custom", description="Source of transaction: fraud_sample, legitimate_sample, or custom")
 
     def to_feature_vector(self) -> list[float]:
         """Return features in the exact training order: Time, Amount, V1..V28"""
@@ -56,6 +57,8 @@ class PredictionResponse(BaseModel):
     threshold: float
     model_version: str
     model_name: str
+    analysis_id: str | None = None
+    investigation_id: str | None = None
 
 
 class FeatureContribution(BaseModel):
@@ -76,14 +79,60 @@ class ExplainResponse(BaseModel):
     disclaimer: str = (
         "Feature contributions describe model behavior and are not proof of fraudulent activity."
     )
+    analysis_id: str | None = None
+    investigation_id: str | None = None
+
+
+class InvestigationUpdateInput(BaseModel):
+    status: str | None = None  # OPEN, UNDER_REVIEW, RESOLVED
+    notes: str | None = None
+    reviewed_by: str | None = None
+
+
+class AnalysisDetailResponse(BaseModel):
+    id: str
+    transaction_id: str
+    fraud_probability: float
+    prediction: str
+    risk_level: str
+    threshold: float
+    model_name: str
+    model_version: str
+    created_at: str
+    source: str
+    amount: float
+    time: float
+    features: dict[str, float]
+    evidence: list[FeatureContribution]
+    investigation_id: str | None = None
+    investigation_status: str | None = None
+
+
+class InvestigationResponse(BaseModel):
+    id: str
+    analysis_id: str
+    status: str  # OPEN, UNDER_REVIEW, RESOLVED
+    notes: str | None = None
+    reviewed_by: str | None = None
+    created_at: str
+    updated_at: str
+    analysis: AnalysisDetailResponse | None = None
 
 
 class HealthResponse(BaseModel):
     status: str
-    model_loaded: bool
-    model_version: str
-    model_name: str
+    api: str = "ok"
+    model: str = "ok"
+    preprocessing: str = "ok"
+    shap: str = "ok"
+    database: str = "ok"
+    model_loaded: bool = True
+    model_version: str = "v1.0.0"
+    model_name: str = "XGBoost"
     timestamp: str
+    database_connected: bool = True
+    preprocessing_loaded: bool = True
+    shap_ready: bool = True
 
 
 class AnalyticsResponse(BaseModel):
@@ -111,3 +160,26 @@ class ModelInfoResponse(BaseModel):
     roc_auc: float
     dataset: dict
     selection_reason: str
+
+
+class NotificationResponse(BaseModel):
+    id: str
+    transaction_id: str
+    analysis_id: str
+    investigation_id: str | None = None
+    fraud_probability: float
+    risk_level: str
+    title: str
+    message: str | None = None
+    is_read: bool
+    created_at: str
+    read_at: str | None = None
+    amount: float | None = None
+    source: str | None = None
+
+
+class NotificationListResponse(BaseModel):
+    items: list[NotificationResponse]
+    unread_count: int
+    total_count: int
+

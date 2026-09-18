@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, type HealthResponse } from "@/lib/api";
+import { NotificationBell } from "./NotificationBell";
 
 interface HeaderProps {
   title: string;
@@ -104,8 +105,11 @@ export function Header({ title, description, onMenuToggle }: HeaderProps) {
         </div>
       </div>
 
-      {/* Right: Status + time */}
+      {/* Right: Status + notifications + time */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.875rem", flexShrink: 0 }}>
+        {/* Real-time Fraud Notification Bell */}
+        <NotificationBell />
+
         {/* Live clock */}
         {time && (
           <span

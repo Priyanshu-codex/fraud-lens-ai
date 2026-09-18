@@ -151,9 +151,9 @@ export default function AnalyzePage() {
   };
 
   // Validate all 30 fields
-  const validateTransaction = (): { valid: boolean; txn?: TransactionInput; errors: Record<string, string> } => {
+  const validateTransaction = useCallback((): { valid: boolean; txn?: TransactionInput; errors: Record<string, string> } => {
     const errors: Record<string, string> = {};
-    const parsedValues: Partial<TransactionInput> = {};
+    const parsedValues: Record<string, number> = {};
 
     for (const key of ALL_30_FEATURES) {
       const rawVal = formData[key]?.trim();
@@ -184,10 +184,10 @@ export default function AnalyzePage() {
     const valid = Object.keys(errors).length === 0;
     return {
       valid,
-      txn: valid ? (parsedValues as TransactionInput) : undefined,
+      txn: valid ? (parsedValues as unknown as TransactionInput) : undefined,
       errors,
     };
-  };
+  }, [formData]);
 
   // Reset entire transaction analyzer
   const handleReset = () => {
@@ -233,6 +233,9 @@ export default function AnalyzePage() {
       setStage("done");
       setStageIndex(STAGE_ORDER.length);
       setResult(response);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("fraudlens:analysis-created"));
+      }
       setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
     } catch (e: unknown) {
       clearInterval(interval);
@@ -240,7 +243,7 @@ export default function AnalyzePage() {
       const msg = e instanceof Error ? e.message : "Analysis failed";
       setAnalyzeError(msg);
     }
-  }, [formData]);
+  }, [validateTransaction]);
 
   // Retry SHAP explanation if needed
   const handleRetryShap = async () => {
@@ -250,6 +253,9 @@ export default function AnalyzePage() {
     try {
       const response = await api.explain(txn);
       setResult(response);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("fraudlens:analysis-created"));
+      }
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Explanation retry failed");
     } finally {
@@ -257,7 +263,7 @@ export default function AnalyzePage() {
     }
   };
 
-  // View Investigation: saves transaction and navigates to /investigations
+  // View Investigation: navigates to /investigations with persisted case ID
   const handleViewInvestigation = () => {
     const { txn } = validateTransaction();
     if (!txn || !result) return;
@@ -269,10 +275,18 @@ export default function AnalyzePage() {
     };
     try {
       sessionStorage.setItem("fraudlens_investigation_txn", JSON.stringify(payload));
-      router.push("/investigations");
+      if (result.investigation_id) {
+        router.push(`/investigations?id=${encodeURIComponent(result.investigation_id)}`);
+      } else {
+        router.push("/investigations");
+      }
     } catch (err) {
       console.error("Failed to store investigation payload", err);
-      router.push("/investigations");
+      if (result.investigation_id) {
+        router.push(`/investigations?id=${encodeURIComponent(result.investigation_id)}`);
+      } else {
+        router.push("/investigations");
+      }
     }
   };
 

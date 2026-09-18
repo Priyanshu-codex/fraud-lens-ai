@@ -35,7 +35,31 @@ export default function ModelPage() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    let ignore = false;
+    async function loadInitial() {
+      try {
+        const [a, m] = await Promise.all([api.analytics(), api.modelInfo()]);
+        if (!ignore) {
+          setAnalytics(a);
+          setModelInfo(m);
+          setThresholdPreview(m.threshold);
+        }
+      } catch (e: unknown) {
+        if (!ignore) {
+          setError(e instanceof Error ? e.message : "Failed to load model data");
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+    loadInitial();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const containerAnim: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.09 } } };
   const itemAnim: Variants = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } };
@@ -218,7 +242,7 @@ export default function ModelPage() {
                       label={{ value: "Precision (%)", angle: -90, position: "insideLeft", offset: 12, fontSize: 11, fill: "var(--color-text-tertiary)" }}
                     />
                     <Tooltip
-                      formatter={(v: any) => [`${Number(v ?? 0).toFixed(1)}%`, ""]}
+                      formatter={(v: unknown) => [`${Number(v ?? 0).toFixed(1)}%`, ""]}
                       contentStyle={{ background: "white", border: "1px solid var(--color-border)", borderRadius: "8px", fontSize: "0.8125rem", boxShadow: "var(--shadow-elevated)" }}
                     />
                     <Line type="monotone" dataKey="precision" stroke="var(--color-chart-1)" strokeWidth={2.5} dot={false} name="Precision" />
@@ -252,7 +276,7 @@ export default function ModelPage() {
                       tickFormatter={(v) => v.toFixed(1)}
                     />
                     <Tooltip
-                      formatter={(v: any, name: any) => [`${(Number(v ?? 0) * 100).toFixed(1)}%`, String(name ?? "")]}
+                      formatter={(v: unknown, name: unknown) => [`${(Number(v ?? 0) * 100).toFixed(1)}%`, String(name ?? "")]}
                       labelFormatter={(v) => `Threshold: ${(Number(v) * 100).toFixed(0)}%`}
                       contentStyle={{ background: "white", border: "1px solid var(--color-border)", borderRadius: "8px", fontSize: "0.8125rem", boxShadow: "var(--shadow-elevated)" }}
                     />

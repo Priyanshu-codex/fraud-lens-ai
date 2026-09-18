@@ -29,7 +29,30 @@ export default function SettingsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    let ignore = false;
+    async function loadInitial() {
+      try {
+        const [h, m] = await Promise.all([api.health(), api.modelInfo()]);
+        if (!ignore) {
+          setHealth(h);
+          setModelInfo(m);
+        }
+      } catch (e: unknown) {
+        if (!ignore) {
+          setError(e instanceof Error ? e.message : "Failed to load system info");
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+    loadInitial();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const containerAnim: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
   const itemAnim: Variants = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
@@ -89,6 +112,13 @@ export default function SettingsPage() {
                     mono: false,
                   },
                   {
+                    label: "Supabase Database",
+                    status: health?.database_connected ? "CONNECTED" : "OFFLINE",
+                    type: (health?.database_connected ? "good" : "bad") as "good" | "warn" | "bad",
+                    detail: "PostgreSQL with RLS",
+                    mono: false,
+                  },
+                  {
                     label: "ML Model",
                     status: health?.model_loaded ? "READY" : "OFFLINE",
                     type: (health?.model_loaded ? "good" : "bad") as "good" | "warn" | "bad",
@@ -96,17 +126,24 @@ export default function SettingsPage() {
                     mono: true,
                   },
                   {
-                    label: "Dataset",
-                    status: "AVAILABLE",
-                    type: "good" as const,
-                    detail: "creditcard.csv — 284,807 rows",
+                    label: "Preprocessing",
+                    status: health?.preprocessing_loaded ? "READY" : "OFFLINE",
+                    type: (health?.preprocessing_loaded ? "good" : "bad") as "good" | "warn" | "bad",
+                    detail: "StandardScaler & robust transform",
                     mono: false,
                   },
                   {
                     label: "Explainability",
-                    status: "READY",
-                    type: "good" as const,
+                    status: health?.shap_ready ? "READY" : "OFFLINE",
+                    type: (health?.shap_ready ? "good" : "bad") as "good" | "warn" | "bad",
                     detail: "SHAP TreeExplainer",
+                    mono: false,
+                  },
+                  {
+                    label: "Dataset",
+                    status: "AVAILABLE",
+                    type: "good" as const,
+                    detail: "creditcard.csv — 284,807 rows",
                     mono: false,
                   },
                 ].map((s) => (
