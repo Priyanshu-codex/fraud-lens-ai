@@ -12,12 +12,12 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = ROOT / "backend" / "models"
-DATASET_PATH = (
-    ROOT
-    / "fraud detection-20260918T042820Z-1-001"
-    / "fraud detection"
-    / "creditcard.csv"
-)
+DATASET_CANDIDATES = [
+    ROOT / "data" / "creditcard.csv",
+    ROOT / "ml" / "data" / "creditcard.csv",
+    ROOT / "fraud detection-20260918T042820Z-1-001" / "fraud detection" / "creditcard.csv",
+]
+DATASET_PATH = next((p for p in DATASET_CANDIDATES if p.exists()), DATASET_CANDIDATES[0])
 
 EXPECTED_FEATURES = (
     ["Time", "Amount"]
