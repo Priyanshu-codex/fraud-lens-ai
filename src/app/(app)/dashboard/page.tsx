@@ -1,24 +1,17 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import { Header } from "@/components/layout/Header";
+import { useMobileMenu } from "@/app/(app)/layout";
 import { RiskBadge } from "@/components/ui/RiskBadge";
 import { MetricSkeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { api, type AnalyticsResponse, type ModelInfoResponse } from "@/lib/api";
-import { formatNumber, formatPercent } from "@/lib/utils";
+import { formatNumber } from "@/lib/utils";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  PieChart,
-  Pie,
-  Legend,
+  BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, Cell, LineChart, Line, Legend,
 } from "recharts";
 
 export default function DashboardPage() {
@@ -26,6 +19,7 @@ export default function DashboardPage() {
   const [modelInfo, setModelInfo] = useState<ModelInfoResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { onMenuToggle } = useMobileMenu();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -41,26 +35,27 @@ export default function DashboardPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
       <Header
-        title="Overview"
-        description="Transaction risk intelligence and model performance"
+        title="Fraud Intelligence"
+        description="Real-time view of transaction risk, model performance, and signal activity"
+        onMenuToggle={onMenuToggle}
       />
-
-      <main style={{ flex: 1, padding: "2rem", maxWidth: "1400px", width: "100%" }}>
+      <main
+        style={{
+          flex: 1,
+          padding: "2rem",
+          maxWidth: "1440px",
+          width: "100%",
+        }}
+      >
         {loading ? (
           <LoadingSkeleton />
         ) : error ? (
-          <ErrorState
-            title="Unable to load dashboard"
-            message={error}
-            onRetry={fetchData}
-          />
+          <ErrorState title="Unable to load intelligence data" message={error} onRetry={fetchData} />
         ) : analytics && modelInfo ? (
           <DashboardContent analytics={analytics} modelInfo={modelInfo} />
         ) : null}
@@ -68,6 +63,16 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+/* ─── Container animation ─────────────────────────────────────────────────── */
+const containerAnim: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.08 } },
+};
+const itemAnim: Variants = {
+  hidden: { opacity: 0, y: 18 },
+  show: { opacity: 1, y: 0 },
+};
 
 function DashboardContent({
   analytics,
@@ -77,37 +82,26 @@ function DashboardContent({
   modelInfo: ModelInfoResponse;
 }) {
   const { confusion_matrix: cm } = analytics;
+  const totalLegit = analytics.legitimate_transactions;
+  const totalFraud = analytics.fraud_transactions;
+  const total = analytics.total_transactions;
 
-  // Distribution data for pie chart
-  const distributionData = [
-    {
-      name: "Legitimate",
-      value: analytics.legitimate_transactions,
-      fill: "#2D6A4F",
-    },
-    {
-      name: "Fraud",
-      value: analytics.fraud_transactions,
-      fill: "#C1392B",
-    },
-  ];
-
-  // Model comparison data
+  // Model comparison bar chart data
   const comparisonData = analytics.model_comparison.map((m) => ({
-    model: m.model.replace(" ", "\n"),
-    "PR-AUC": m.pr_auc,
-    "ROC-AUC": m.roc_auc,
-    F1: m.f1,
+    model: m.model.split(" ")[0],
+    "PR-AUC": +(m.pr_auc * 100).toFixed(2),
+    "ROC-AUC": +(m.roc_auc * 100).toFixed(2),
+    F1: +(m.f1 * 100).toFixed(2),
+    isSelected: m.model === modelInfo.model_name,
   }));
 
-  const containerAnim = {
-    hidden: {},
-    show: { transition: { staggerChildren: 0.08 } },
-  };
-  const itemAnim = {
-    hidden: { opacity: 0, y: 16 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
-  };
+  // PR curve data
+  const prCurveData = analytics.threshold_analysis
+    .filter((_, i) => i % 4 === 0)
+    .map((t) => ({
+      recall: +(t.recall * 100).toFixed(1),
+      precision: +(t.precision * 100).toFixed(1),
+    }));
 
   return (
     <motion.div
@@ -116,138 +110,276 @@ function DashboardContent({
       animate="show"
       style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}
     >
-      {/* Section heading */}
+      {/* ── Section title ──────────────────────────────────────────────────── */}
       <motion.div variants={itemAnim}>
-        <div className="text-section-heading" style={{ marginBottom: "0.25rem" }}>
-          Dataset Intelligence
+        <div className="intelligence-label" style={{ marginBottom: "0.25rem" }}>
+          Transaction Intelligence
         </div>
         <div style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
-          Analyzed from the credit card fraud detection dataset — 284,807 transactions
+          Analyzed from the credit card fraud detection dataset · {formatNumber(total)} transactions
         </div>
       </motion.div>
 
-      {/* Primary metrics row */}
+      {/* ── Primary metric strip ───────────────────────────────────────────── */}
       <motion.div
         variants={itemAnim}
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
           gap: "1rem",
         }}
       >
-        <MetricCard
-          label="Total Transactions"
-          value={formatNumber(analytics.total_transactions)}
-          sub="Complete dataset"
-          accent="#1A3A4A"
-        />
-        <MetricCard
-          label="Fraud Transactions"
-          value={formatNumber(analytics.fraud_transactions)}
-          sub={`${analytics.fraud_rate.toFixed(4)}% of all transactions`}
-          accent="var(--color-risk-high)"
-        />
-        <MetricCard
-          label="Legitimate Transactions"
-          value={formatNumber(analytics.legitimate_transactions)}
-          sub="Non-fraudulent activity"
-          accent="var(--color-risk-low)"
-        />
-        <MetricCard
-          label="Fraud Rate"
-          value={`${analytics.fraud_rate.toFixed(4)}%`}
-          sub="Extreme class imbalance"
-          accent="var(--color-risk-review)"
-          highlight
-        />
-      </motion.div>
-
-      {/* Main charts row */}
-      <motion.div
-        variants={itemAnim}
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1.5fr",
-          gap: "1.25rem",
-        }}
-      >
-        {/* Class distribution pie */}
-        <div className="card" style={{ padding: "1.5rem" }}>
-          <div style={{ marginBottom: "1rem" }}>
-            <div className="text-section-heading" style={{ marginBottom: "0.25rem" }}>
-              Class Distribution
-            </div>
-            <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-              Visualizing the extreme imbalance
-            </div>
+        {/* Total transactions */}
+        <div className="intel-card intel-card-accent">
+          <div className="intelligence-label" style={{ marginBottom: "0.875rem" }}>
+            Transaction Intelligence
           </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie
-                data={distributionData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={90}
-                paddingAngle={3}
-                dataKey="value"
-                strokeWidth={0}
-              >
-                {distributionData.map((entry, i) => (
-                  <Cell key={i} fill={entry.fill} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value: number) => [formatNumber(value), ""]}
-                contentStyle={{
-                  background: "white",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "6px",
-                  fontSize: "0.8125rem",
-                }}
-              />
-              <Legend
-                iconType="circle"
-                iconSize={8}
-                formatter={(v) => (
-                  <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-                    {v}
-                  </span>
-                )}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="text-metric" style={{ marginBottom: "0.625rem" }}>
+            {formatNumber(total)}
+          </div>
+          <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginBottom: "0.875rem" }}>
+            Analyzed transactions
+          </div>
+          {/* Distribution mini-bars */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+            <MiniBar
+              label="Legitimate"
+              count={totalLegit}
+              total={total}
+              color="var(--color-risk-low)"
+            />
+            <MiniBar
+              label="Fraud"
+              count={totalFraud}
+              total={total}
+              color="var(--color-risk-high)"
+            />
+          </div>
+        </div>
+
+        {/* Fraud signals */}
+        <div className="intel-card intel-card-high">
+          <div className="intelligence-label" style={{ marginBottom: "0.875rem" }}>
+            Fraud Signals
+          </div>
+          <div className="text-metric" style={{ color: "var(--color-risk-high)", marginBottom: "0.25rem" }}>
+            {formatNumber(totalFraud)}
+          </div>
+          <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginBottom: "0.875rem" }}>
+            Detected transactions
+          </div>
           <div
             style={{
-              textAlign: "center",
-              fontSize: "0.8125rem",
-              color: "var(--color-text-tertiary)",
-              marginTop: "0.5rem",
-              padding: "0.5rem",
-              backgroundColor: "var(--color-risk-review-bg)",
-              borderRadius: "4px",
-              border: "1px solid var(--color-risk-review-border)",
+              height: "6px",
+              background: "var(--color-border)",
+              borderRadius: "3px",
+              overflow: "hidden",
             }}
           >
-            <span style={{ fontWeight: 600, color: "var(--color-risk-review)" }}>
-              577:1
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${(totalFraud / total) * 100}%` }}
+              transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+              style={{
+                height: "100%",
+                background: "var(--color-risk-high)",
+                borderRadius: "3px",
+              }}
+            />
+          </div>
+          <div style={{ fontSize: "0.6875rem", color: "var(--color-text-tertiary)", marginTop: "0.375rem" }}>
+            {analytics.fraud_rate.toFixed(4)}% of total
+          </div>
+        </div>
+
+        {/* Fraud rate */}
+        <div className="intel-card intel-card-review">
+          <div className="intelligence-label" style={{ marginBottom: "0.875rem" }}>
+            Fraud Rate
+          </div>
+          <div className="text-metric" style={{ color: "var(--color-risk-review)", marginBottom: "0.25rem" }}>
+            {analytics.fraud_rate.toFixed(4)}%
+          </div>
+          <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginBottom: "0.875rem" }}>
+            Extreme class imbalance
+          </div>
+          <div
+            style={{
+              padding: "0.4375rem 0.75rem",
+              background: "var(--color-risk-review-bg)",
+              border: "1px solid var(--color-risk-review-border)",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "0.75rem",
+              color: "var(--color-risk-review)",
+              fontWeight: 600,
+            }}
+          >
+            577:1 legitimate-to-fraud ratio
+          </div>
+        </div>
+
+        {/* Model readiness */}
+        <div className="intel-card intel-card-low">
+          <div className="intelligence-label" style={{ marginBottom: "0.875rem" }}>
+            Model Readiness
+          </div>
+          <div
+            style={{
+              fontSize: "1.125rem",
+              fontWeight: 800,
+              color: "var(--color-text-primary)",
+              letterSpacing: "-0.02em",
+              marginBottom: "0.25rem",
+            }}
+          >
+            {modelInfo.model_name}
+          </div>
+          <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginBottom: "0.875rem" }}>
+            Active inference engine
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <RiskBadge level="LOW" size="sm" showIcon={false} />
+            <span style={{ fontSize: "0.75rem", color: "var(--color-text-tertiary)", fontFamily: "var(--font-mono)" }}>
+              threshold: {(modelInfo.threshold * 100).toFixed(0)}%
             </span>
-            {" "}legitimate-to-fraud ratio — accuracy is an insufficient metric
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ── Model Intelligence + Comparison ───────────────────────────────── */}
+      <motion.div
+        variants={itemAnim}
+        style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: "1.25rem" }}
+        className="responsive-grid-2"
+      >
+        {/* Model performance panel */}
+        <div className="card" style={{ padding: "1.5rem" }}>
+          <div className="intelligence-label" style={{ marginBottom: "1.25rem" }}>
+            Model Intelligence
+          </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "1.25rem",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "1rem", fontWeight: 700, letterSpacing: "-0.015em" }}>
+                {modelInfo.model_name}
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--color-text-tertiary)", marginTop: "2px" }}>
+                {modelInfo.model_version}
+              </div>
+            </div>
+            <div
+              style={{
+                padding: "0.3125rem 0.75rem",
+                background: "var(--color-risk-low-bg)",
+                border: "1px solid var(--color-risk-low-border)",
+                borderRadius: "4px",
+                fontSize: "0.6875rem",
+                fontWeight: 700,
+                color: "var(--color-risk-low)",
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+              }}
+            >
+              Active Model
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
+            {[
+              { label: "PR-AUC", value: modelInfo.pr_auc, primary: true, note: "Primary metric" },
+              { label: "ROC-AUC", value: modelInfo.roc_auc, note: "Overall discrimination" },
+              { label: "Precision", value: modelInfo.precision, note: "Fraud alerts that are real" },
+              { label: "Recall", value: modelInfo.recall, note: "Fraud cases detected" },
+              { label: "F1 Score", value: modelInfo.f1, note: "Precision-recall balance" },
+            ].map((m) => (
+              <div key={m.label}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: "0.3rem",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                    <span
+                      style={{
+                        fontSize: "0.8125rem",
+                        fontWeight: m.primary ? 700 : 500,
+                        color: m.primary ? "var(--color-brand)" : "var(--color-text-primary)",
+                      }}
+                    >
+                      {m.label}
+                    </span>
+                    {m.primary && (
+                      <span
+                        style={{
+                          fontSize: "0.5625rem",
+                          fontWeight: 700,
+                          letterSpacing: "0.07em",
+                          textTransform: "uppercase",
+                          color: "var(--color-brand)",
+                          background: "var(--color-brand-subtle)",
+                          border: "1px solid var(--color-brand-border)",
+                          padding: "0.1rem 0.375rem",
+                          borderRadius: "2px",
+                        }}
+                      >
+                        Primary
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "0.875rem",
+                      fontWeight: 700,
+                      color: m.primary ? "var(--color-brand)" : "var(--color-text-primary)",
+                    }}
+                  >
+                    {(m.value * 100).toFixed(2)}%
+                  </span>
+                </div>
+                <div style={{ position: "relative", height: "5px", background: "var(--color-border)", borderRadius: "3px", overflow: "hidden" }}>
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${m.value * 100}%` }}
+                    transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      background: m.primary ? "var(--color-brand)" : "var(--color-accent)",
+                      borderRadius: "3px",
+                      opacity: m.primary ? 0.9 : 0.65,
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: "0.6875rem", color: "var(--color-text-tertiary)", marginTop: "0.2rem" }}>
+                  {m.note}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Model comparison chart */}
         <div className="card" style={{ padding: "1.5rem" }}>
-          <div style={{ marginBottom: "1rem" }}>
-            <div className="text-section-heading" style={{ marginBottom: "0.25rem" }}>
-              Model Comparison
-            </div>
-            <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-              Validation set performance — PR-AUC is the primary metric
-            </div>
+          <div className="intelligence-label" style={{ marginBottom: "0.25rem" }}>
+            Model Comparison
           </div>
-          <ResponsiveContainer width="100%" height={230}>
-            <BarChart data={comparisonData} barGap={3} barCategoryGap="30%">
+          <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginBottom: "1.25rem" }}>
+            Validation set — PR-AUC is the primary evaluation metric for imbalanced fraud detection
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={comparisonData} barGap={3} barCategoryGap="32%">
               <XAxis
                 dataKey="model"
                 tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
@@ -255,365 +387,246 @@ function DashboardContent({
                 tickLine={false}
               />
               <YAxis
-                domain={[0, 1]}
-                tick={{ fontSize: 11, fill: "var(--color-text-tertiary)" }}
+                domain={[0, 100]}
+                tick={{ fontSize: 10, fill: "var(--color-text-tertiary)" }}
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={(v) => v.toFixed(1)}
+                tickFormatter={(v) => `${v}%`}
               />
               <Tooltip
-                formatter={(value: number) => value.toFixed(4)}
+                formatter={(value: any, name: any) => [`${Number(value ?? 0).toFixed(2)}%`, String(name ?? "")]}
                 contentStyle={{
                   background: "white",
                   border: "1px solid var(--color-border)",
-                  borderRadius: "6px",
+                  borderRadius: "8px",
                   fontSize: "0.8125rem",
+                  boxShadow: "var(--shadow-elevated)",
                 }}
               />
               <Legend
                 iconType="square"
                 iconSize={8}
-                formatter={(v) => (
-                  <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-                    {v}
-                  </span>
-                )}
+                formatter={(v) => <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>{v}</span>}
               />
-              <Bar dataKey="PR-AUC" fill="#1A3A4A" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="ROC-AUC" fill="#6B8CAE" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="F1" fill="#A7C4D4" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="PR-AUC" fill="var(--color-chart-1)" radius={[4, 4, 0, 0]}>
+                {comparisonData.map((entry, i) => (
+                  <Cell
+                    key={i}
+                    fill={entry.isSelected ? "var(--color-brand)" : "var(--color-chart-1)"}
+                    opacity={entry.isSelected ? 1 : 0.7}
+                  />
+                ))}
+              </Bar>
+              <Bar dataKey="ROC-AUC" fill="#6B8CAE" radius={[4, 4, 0, 0]} opacity={0.75} />
+              <Bar dataKey="F1" fill="#A7C4D4" radius={[4, 4, 0, 0]} opacity={0.65} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </motion.div>
 
-      {/* Model Performance */}
-      <motion.div variants={itemAnim}>
-        <div className="text-section-heading" style={{ marginBottom: "1rem" }}>
-          Selected Model Performance
-        </div>
-        <div
-          className="card"
-          style={{ padding: "1.5rem", overflow: "hidden" }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              marginBottom: "1.5rem",
-              flexWrap: "wrap",
-              gap: "1rem",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: "1.125rem",
-                  fontWeight: 700,
-                  color: "var(--color-text-primary)",
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                {modelInfo.model_name}
-              </div>
-              <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginTop: "0.25rem" }}>
-                Test set evaluation · Threshold:{" "}
-                <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)" }}>
-                  {(modelInfo.threshold * 100).toFixed(0)}%
-                </span>
-              </div>
-            </div>
-            <div
-              style={{
-                padding: "0.375rem 0.875rem",
-                backgroundColor: "var(--color-risk-low-bg)",
-                border: "1px solid var(--color-risk-low-border)",
-                borderRadius: "4px",
-                fontSize: "0.8125rem",
-                fontWeight: 600,
-                color: "var(--color-risk-low)",
-              }}
-            >
-              Active Model
-            </div>
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-              gap: "1.25rem",
-            }}
-          >
-            <PerformanceMetric
-              label="Precision"
-              value={modelInfo.precision}
-              description="Fraud alerts that are real"
-            />
-            <PerformanceMetric
-              label="Recall"
-              value={modelInfo.recall}
-              description="Fraud cases detected"
-            />
-            <PerformanceMetric
-              label="F1 Score"
-              value={modelInfo.f1}
-              description="Precision-recall balance"
-            />
-            <PerformanceMetric
-              label="PR-AUC"
-              value={modelInfo.pr_auc}
-              description="Primary fraud metric"
-              highlight
-            />
-            <PerformanceMetric
-              label="ROC-AUC"
-              value={modelInfo.roc_auc}
-              description="Overall discrimination"
-            />
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Confusion Matrix */}
-      <motion.div variants={itemAnim}>
-        <div className="text-section-heading" style={{ marginBottom: "1rem" }}>
-          Test Set Confusion Matrix
-        </div>
+      {/* ── Confusion Matrix + PR Curve ────────────────────────────────────── */}
+      <motion.div
+        variants={itemAnim}
+        style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: "1.25rem" }}
+        className="responsive-grid-2"
+      >
+        {/* Confusion Matrix */}
         <div className="card" style={{ padding: "1.5rem" }}>
+          <div className="intelligence-label" style={{ marginBottom: "1.25rem" }}>
+            Test Set Confusion Matrix
+          </div>
           <div
             style={{
               display: "grid",
               gridTemplateColumns: "auto 1fr 1fr",
-              gap: "0",
-              maxWidth: "400px",
+              gap: "4px",
+              maxWidth: "320px",
             }}
           >
-            {/* Header row */}
+            {/* Headers */}
             <div />
+            {["Pred. Legit", "Pred. Fraud"].map((h) => (
+              <div
+                key={h}
+                style={{
+                  textAlign: "center",
+                  fontSize: "0.6875rem",
+                  fontWeight: 700,
+                  color: "var(--color-text-tertiary)",
+                  letterSpacing: "0.07em",
+                  textTransform: "uppercase",
+                  padding: "0.375rem 0.5rem",
+                }}
+              >
+                {h}
+              </div>
+            ))}
+            {/* Row 1: Actual Legit */}
             <div
               style={{
-                textAlign: "center",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                color: "var(--color-text-tertiary)",
-                padding: "0.5rem",
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-              }}
-            >
-              Pred. Legit
-            </div>
-            <div
-              style={{
-                textAlign: "center",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                color: "var(--color-text-tertiary)",
-                padding: "0.5rem",
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-              }}
-            >
-              Pred. Fraud
-            </div>
-
-            {/* Actual Legit row */}
-            <div
-              style={{
-                fontSize: "0.75rem",
-                fontWeight: 600,
+                fontSize: "0.6875rem",
+                fontWeight: 700,
                 color: "var(--color-text-tertiary)",
                 display: "flex",
                 alignItems: "center",
-                padding: "0 0.75rem 0 0",
-                letterSpacing: "0.05em",
+                paddingRight: "0.625rem",
+                letterSpacing: "0.06em",
                 textTransform: "uppercase",
               }}
             >
-              Act. Legit
+              Legit
             </div>
-            <CMCell value={cm.true_negatives} label="TN" type="good" />
+            <CMCell value={cm.true_negatives}  label="TN" type="good" />
             <CMCell value={cm.false_positives} label="FP" type="warn" />
-
-            {/* Actual Fraud row */}
+            {/* Row 2: Actual Fraud */}
             <div
               style={{
-                fontSize: "0.75rem",
-                fontWeight: 600,
+                fontSize: "0.6875rem",
+                fontWeight: 700,
                 color: "var(--color-text-tertiary)",
                 display: "flex",
                 alignItems: "center",
-                padding: "0 0.75rem 0 0",
-                letterSpacing: "0.05em",
+                paddingRight: "0.625rem",
+                letterSpacing: "0.06em",
                 textTransform: "uppercase",
               }}
             >
-              Act. Fraud
+              Fraud
             </div>
             <CMCell value={cm.false_negatives} label="FN" type="bad" />
-            <CMCell value={cm.true_positives} label="TP" type="good" />
+            <CMCell value={cm.true_positives}  label="TP" type="good" />
           </div>
           <div
             style={{
-              marginTop: "1rem",
+              marginTop: "1.125rem",
               fontSize: "0.8125rem",
               color: "var(--color-text-secondary)",
+              lineHeight: 1.6,
             }}
           >
-            FN = {cm.false_negatives} fraud cases missed · FP = {cm.false_positives} false alerts generated
+            <span style={{ color: "var(--color-risk-high)", fontWeight: 600 }}>
+              FN = {formatNumber(cm.false_negatives)}
+            </span>{" "}
+            fraud cases missed ·{" "}
+            <span style={{ color: "var(--color-risk-review)", fontWeight: 600 }}>
+              FP = {formatNumber(cm.false_positives)}
+            </span>{" "}
+            false alerts
           </div>
+        </div>
+
+        {/* PR Curve */}
+        <div className="card" style={{ padding: "1.5rem" }}>
+          <div className="intelligence-label" style={{ marginBottom: "0.25rem" }}>
+            Precision–Recall Curve
+          </div>
+          <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginBottom: "1.25rem" }}>
+            PR-AUC = {(modelInfo.pr_auc * 100).toFixed(2)}% — primary metric for rare-event fraud detection
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={prCurveData}>
+              <XAxis
+                dataKey="recall"
+                label={{ value: "Recall (%)", position: "insideBottom", offset: -2, fontSize: 11, fill: "var(--color-text-tertiary)" }}
+                domain={[0, 100]}
+                tick={{ fontSize: 10, fill: "var(--color-text-tertiary)" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                domain={[0, 100]}
+                tick={{ fontSize: 10, fill: "var(--color-text-tertiary)" }}
+                axisLine={false}
+                tickLine={false}
+                label={{ value: "Precision (%)", angle: -90, position: "insideLeft", offset: 12, fontSize: 11, fill: "var(--color-text-tertiary)" }}
+              />
+              <Tooltip
+                formatter={(v: any) => [`${Number(v ?? 0).toFixed(1)}%`, ""]}
+                contentStyle={{ background: "white", border: "1px solid var(--color-border)", borderRadius: "8px", fontSize: "0.8125rem" }}
+              />
+              <Line
+                type="monotone"
+                dataKey="precision"
+                stroke="var(--color-chart-1)"
+                strokeWidth={2.5}
+                dot={false}
+                name="Precision"
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </motion.div>
 
-      {/* Imbalance note */}
+      {/* ── Why PR-AUC note ───────────────────────────────────────────────── */}
       <motion.div variants={itemAnim}>
         <div
           style={{
-            padding: "1rem 1.25rem",
-            backgroundColor: "var(--color-surface-2)",
+            padding: "1rem 1.375rem",
+            background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
+            borderLeft: "4px solid var(--color-accent)",
             borderRadius: "var(--radius-md)",
             fontSize: "0.875rem",
             color: "var(--color-text-secondary)",
-            lineHeight: 1.6,
+            lineHeight: 1.65,
           }}
         >
-          <strong style={{ color: "var(--color-text-primary)" }}>
-            Why PR-AUC is the primary metric:
-          </strong>{" "}
+          <strong style={{ color: "var(--color-text-primary)" }}>Why PR-AUC is the primary metric:</strong>{" "}
           With only {analytics.fraud_rate.toFixed(4)}% of transactions being fraudulent, a classifier
           predicting "legitimate" for every transaction would achieve {(100 - analytics.fraud_rate).toFixed(2)}% accuracy
-          while catching zero fraud cases. Precision-Recall AUC measures performance on the
-          positive (fraud) class specifically — making it far more informative for rare-event detection.
+          while catching zero fraud. Precision-Recall AUC measures performance specifically on the minority fraud class —
+          making it far more meaningful for rare-event detection.
         </div>
       </motion.div>
+
+      <style>{`
+        @media (max-width: 900px) {
+          .responsive-grid-2 {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </motion.div>
   );
 }
 
-function MetricCard({
+/* ─── Sub-components ──────────────────────────────────────────────────────── */
+function MiniBar({
   label,
-  value,
-  sub,
-  accent,
-  highlight = false,
+  count,
+  total,
+  color,
 }: {
   label: string;
-  value: string;
-  sub: string;
-  accent: string;
-  highlight?: boolean;
+  count: number;
+  total: number;
+  color: string;
 }) {
+  const pct = total > 0 ? (count / total) * 100 : 0;
   return (
-    <div
-      className="card"
-      style={{
-        padding: "1.25rem 1.5rem",
-        borderTop: `3px solid ${accent}`,
-        ...(highlight ? { backgroundColor: "var(--color-surface)" } : {}),
-      }}
-    >
-      <div
-        style={{
-          fontSize: "0.75rem",
-          fontWeight: 600,
-          color: "var(--color-text-tertiary)",
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-          marginBottom: "0.75rem",
-        }}
-      >
-        {label}
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.2rem" }}>
+        <span style={{ fontSize: "0.6875rem", color: "var(--color-text-tertiary)", fontWeight: 500 }}>{label}</span>
+        <span style={{ fontSize: "0.6875rem", color, fontWeight: 600, fontFamily: "var(--font-mono)" }}>
+          {formatNumber(count)}
+        </span>
       </div>
-      <div
-        style={{
-          fontSize: "1.75rem",
-          fontWeight: 700,
-          color: "var(--color-text-primary)",
-          letterSpacing: "-0.03em",
-          fontVariantNumeric: "tabular-nums",
-          lineHeight: 1.1,
-          marginBottom: "0.5rem",
-        }}
-      >
-        {value}
-      </div>
-      <div
-        style={{
-          fontSize: "0.8125rem",
-          color: "var(--color-text-secondary)",
-        }}
-      >
-        {sub}
+      <div style={{ height: "4px", background: "var(--color-border)", borderRadius: "2px", overflow: "hidden" }}>
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+          style={{ height: "100%", background: color, borderRadius: "2px", opacity: 0.75 }}
+        />
       </div>
     </div>
   );
 }
 
-function PerformanceMetric({
-  label,
-  value,
-  description,
-  highlight = false,
-}: {
-  label: string;
-  value: number;
-  description: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      style={{
-        padding: "1rem",
-        backgroundColor: highlight ? "var(--color-brand-subtle)" : "var(--color-surface-2)",
-        borderRadius: "var(--radius-md)",
-        border: `1px solid ${highlight ? "var(--color-brand-border)" : "var(--color-border)"}`,
-      }}
-    >
-      <div
-        style={{
-          fontSize: "0.6875rem",
-          fontWeight: 600,
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-          color: highlight ? "var(--color-brand)" : "var(--color-text-tertiary)",
-          marginBottom: "0.5rem",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: "1.375rem",
-          fontWeight: 700,
-          color: "var(--color-text-primary)",
-          fontVariantNumeric: "tabular-nums",
-          letterSpacing: "-0.02em",
-          marginBottom: "0.25rem",
-        }}
-      >
-        {(value * 100).toFixed(2)}%
-      </div>
-      <div style={{ fontSize: "0.75rem", color: "var(--color-text-secondary)" }}>
-        {description}
-      </div>
-    </div>
-  );
-}
-
-function CMCell({
-  value,
-  label,
-  type,
-}: {
-  value: number;
-  label: string;
-  type: "good" | "bad" | "warn";
-}) {
+function CMCell({ value, label, type }: { value: number; label: string; type: "good" | "bad" | "warn" }) {
   const colors = {
     good: { bg: "var(--color-risk-low-bg)", border: "var(--color-risk-low-border)", text: "var(--color-risk-low)" },
-    bad: { bg: "var(--color-risk-high-bg)", border: "var(--color-risk-high-border)", text: "var(--color-risk-high)" },
+    bad:  { bg: "var(--color-risk-high-bg)", border: "var(--color-risk-high-border)", text: "var(--color-risk-high)" },
     warn: { bg: "var(--color-risk-review-bg)", border: "var(--color-risk-review-border)", text: "var(--color-risk-review)" },
   }[type];
 
@@ -622,31 +635,15 @@ function CMCell({
       style={{
         backgroundColor: colors.bg,
         border: `1px solid ${colors.border}`,
-        borderRadius: "6px",
+        borderRadius: "7px",
         padding: "0.875rem",
         textAlign: "center",
-        margin: "3px",
       }}
     >
-      <div
-        style={{
-          fontSize: "0.6875rem",
-          fontWeight: 600,
-          letterSpacing: "0.06em",
-          color: colors.text,
-          marginBottom: "0.375rem",
-        }}
-      >
+      <div style={{ fontSize: "0.5875rem", fontWeight: 700, letterSpacing: "0.08em", color: colors.text, marginBottom: "0.375rem", textTransform: "uppercase" }}>
         {label}
       </div>
-      <div
-        style={{
-          fontSize: "1.375rem",
-          fontWeight: 700,
-          color: "var(--color-text-primary)",
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
+      <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}>
         {formatNumber(value)}
       </div>
     </div>
@@ -657,15 +654,15 @@ function LoadingSkeleton() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
       <div>
-        <div className="skeleton" style={{ width: "160px", height: "0.75rem", marginBottom: "0.5rem" }} />
-        <div className="skeleton" style={{ width: "300px", height: "0.875rem" }} />
+        <div className="skeleton" style={{ width: "140px", height: "0.6875rem", marginBottom: "0.5rem" }} />
+        <div className="skeleton" style={{ width: "280px", height: "0.875rem" }} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
         {Array.from({ length: 4 }).map((_, i) => <MetricSkeleton key={i} />)}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: "1.25rem" }}>
-        <div className="card" style={{ height: "300px" }} />
-        <div className="card" style={{ height: "300px" }} />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: "1.25rem" }}>
+        <div className="card" style={{ height: "320px" }} />
+        <div className="card" style={{ height: "320px" }} />
       </div>
     </div>
   );

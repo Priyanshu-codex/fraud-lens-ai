@@ -3,24 +3,24 @@
 export const RISK_CONFIG = {
   LOW: {
     label: "Low Risk",
-    color: "#2D6A4F",
-    bg: "#F0FBF5",
-    border: "#A7D7C5",
-    text: "#2D6A4F",
+    color: "#236641",
+    bg: "#EEF9F3",
+    border: "#9ED4B9",
+    text: "#236641",
   },
   REVIEW: {
-    label: "Review",
-    color: "#B45309",
-    bg: "#FFFBEB",
-    border: "#FCD34D",
-    text: "#B45309",
+    label: "Review Required",
+    color: "#A64C00",
+    bg: "#FFF8EE",
+    border: "#FBCF8A",
+    text: "#A64C00",
   },
   HIGH: {
     label: "High Risk",
-    color: "#C1392B",
-    bg: "#FFF5F5",
-    border: "#FCA5A5",
-    text: "#C1392B",
+    color: "#C1321F",
+    bg: "#FFF4F3",
+    border: "#F8BCB7",
+    text: "#C1321F",
   },
 } as const;
 
@@ -34,21 +34,40 @@ export function formatProbability(prob: number): string {
   return `${(prob * 100).toFixed(2)}%`;
 }
 
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
+/** Format as Indian Rupees (₹) — primary currency display in FraudLens */
+export function formatCurrencyINR(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency: "USD",
+    currency: "INR",
     minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
 
+/** Format as INR without decimals for large numbers */
+export function formatCurrencyINRCompact(amount: number): string {
+  if (amount >= 10_000_000) {
+    return `₹${(amount / 10_000_000).toFixed(2)} Cr`;
+  }
+  if (amount >= 100_000) {
+    return `₹${(amount / 100_000).toFixed(2)} L`;
+  }
+  return formatCurrencyINR(amount);
+}
+
+/** Legacy — kept for compatibility but redirects to INR */
+export function formatCurrency(amount: number): string {
+  return formatCurrencyINR(amount);
+}
+
+/** Format number using Indian number system */
 export function formatNumber(n: number): string {
-  return new Intl.NumberFormat("en-US").format(n);
+  return new Intl.NumberFormat("en-IN").format(n);
 }
 
 export function formatTimestamp(iso: string): string {
   try {
-    return new Date(iso).toLocaleString("en-US", {
+    return new Date(iso).toLocaleString("en-IN", {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -61,6 +80,25 @@ export function formatTimestamp(iso: string): string {
   }
 }
 
+export function formatTimeOnly(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return iso;
+  }
+}
+
 export function cn(...classes: (string | undefined | null | false)[]): string {
   return classes.filter(Boolean).join(" ");
+}
+
+/** Generate a pseudo-unique transaction ID from amount+time for display */
+export function generateTxnId(amount: number, time: number): string {
+  const hash = Math.abs(Math.floor((amount * 1000 + time * 7) % 99999));
+  return `TX-${String(hash).padStart(5, "0")}`;
 }

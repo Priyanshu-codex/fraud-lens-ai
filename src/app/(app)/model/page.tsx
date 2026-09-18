@@ -1,22 +1,15 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { Header } from "@/components/layout/Header";
+import { useMobileMenu } from "@/app/(app)/layout";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { MetricSkeleton } from "@/components/ui/Skeleton";
 import { api, type AnalyticsResponse, type ModelInfoResponse } from "@/lib/api";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-  BarChart,
-  Bar,
-  Legend,
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  ReferenceLine, Legend,
 } from "recharts";
 
 export default function ModelPage() {
@@ -25,6 +18,7 @@ export default function ModelPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [thresholdPreview, setThresholdPreview] = useState<number | null>(null);
+  const { onMenuToggle } = useMobileMenu();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -41,30 +35,23 @@ export default function ModelPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const containerAnim = {
-    hidden: {},
-    show: { transition: { staggerChildren: 0.1 } },
-  };
-  const itemAnim = {
-    hidden: { opacity: 0, y: 16 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
-  };
+  const containerAnim: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.09 } } };
+  const itemAnim: Variants = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } };
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
       <Header
-        title="Model Lab"
-        description="Candidate model comparison, threshold analysis, and performance metrics"
+        title="Model Intelligence"
+        description="Candidate comparison, threshold analysis, and test-set performance metrics"
+        onMenuToggle={onMenuToggle}
       />
-      <main style={{ flex: 1, padding: "2rem", maxWidth: "1300px", width: "100%" }}>
+      <main style={{ flex: 1, padding: "2rem", maxWidth: "1400px", width: "100%" }}>
         {loading ? (
           <LoadingState />
         ) : error ? (
-          <ErrorState title="Could not load model data" message={error} onRetry={fetchData} />
+          <ErrorState title="Could not load model intelligence" message={error} onRetry={fetchData} />
         ) : analytics && modelInfo ? (
           <motion.div
             variants={containerAnim}
@@ -72,91 +59,106 @@ export default function ModelPage() {
             animate="show"
             style={{ display: "flex", flexDirection: "column", gap: "2rem" }}
           >
-            {/* Model comparison table */}
+            {/* ── Model comparison table ──────────────────────────────────── */}
             <motion.div variants={itemAnim}>
-              <div className="text-section-heading" style={{ marginBottom: "1rem" }}>
+              <div className="intelligence-label" style={{ marginBottom: "1rem" }}>
                 Model Comparison — Validation Set
               </div>
               <div className="card" style={{ overflow: "hidden" }}>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Model</th>
-                      <th>PR-AUC ▾</th>
-                      <th>ROC-AUC</th>
-                      <th>F1</th>
-                      <th>Precision</th>
-                      <th>Recall</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {analytics.model_comparison.map((m) => {
-                      const isSelected = m.model === modelInfo.model_name;
-                      return (
-                        <tr key={m.model}>
-                          <td>
-                            <div
-                              style={{
-                                fontWeight: isSelected ? 700 : 500,
-                                color: "var(--color-text-primary)",
-                              }}
-                            >
-                              {m.model}
-                            </div>
-                          </td>
-                          <td>
-                            <MetricCell value={m.pr_auc} highlight={isSelected} />
-                          </td>
-                          <td>
-                            <MetricCell value={m.roc_auc} />
-                          </td>
-                          <td>
-                            <MetricCell value={m.f1} />
-                          </td>
-                          <td>
-                            <MetricCell value={m.precision} />
-                          </td>
-                          <td>
-                            <MetricCell value={m.recall} />
-                          </td>
-                          <td>
-                            {isSelected ? (
-                              <span
+                <div style={{ overflowX: "auto" }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Model</th>
+                        <th>
+                          <span style={{ color: "var(--color-brand)" }}>PR-AUC ▾</span>
+                        </th>
+                        <th>ROC-AUC</th>
+                        <th>F1</th>
+                        <th>Precision</th>
+                        <th>Recall</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.model_comparison.map((m) => {
+                        const isSelected = m.model === modelInfo.model_name;
+                        return (
+                          <tr key={m.model} className={isSelected ? "row-selected" : ""}>
+                            <td>
+                              <div
                                 style={{
-                                  display: "inline-flex",
+                                  fontWeight: isSelected ? 700 : 500,
+                                  color: "var(--color-text-primary)",
+                                  display: "flex",
                                   alignItems: "center",
-                                  gap: "0.375rem",
-                                  padding: "0.2rem 0.625rem",
-                                  borderRadius: "4px",
-                                  fontSize: "0.75rem",
-                                  fontWeight: 600,
-                                  color: "var(--color-risk-low)",
-                                  backgroundColor: "var(--color-risk-low-bg)",
-                                  border: "1px solid var(--color-risk-low-border)",
+                                  gap: "0.5rem",
                                 }}
                               >
-                                <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="12" /></svg>
-                                Selected
-                              </span>
-                            ) : (
-                              <span style={{ fontSize: "0.8125rem", color: "var(--color-text-tertiary)" }}>
-                                Candidate
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                                {isSelected && (
+                                  <div
+                                    style={{
+                                      width: "6px",
+                                      height: "6px",
+                                      borderRadius: "50%",
+                                      background: "var(--color-brand)",
+                                    }}
+                                  />
+                                )}
+                                {m.model}
+                              </div>
+                            </td>
+                            <td>
+                              <MetricCell value={m.pr_auc} highlight={isSelected} />
+                            </td>
+                            <td><MetricCell value={m.roc_auc} /></td>
+                            <td><MetricCell value={m.f1} /></td>
+                            <td><MetricCell value={m.precision} /></td>
+                            <td><MetricCell value={m.recall} /></td>
+                            <td>
+                              {isSelected ? (
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "0.375rem",
+                                    padding: "0.2rem 0.625rem",
+                                    borderRadius: "4px",
+                                    fontSize: "0.6875rem",
+                                    fontWeight: 700,
+                                    color: "var(--color-risk-low)",
+                                    backgroundColor: "var(--color-risk-low-bg)",
+                                    border: "1px solid var(--color-risk-low-border)",
+                                    letterSpacing: "0.05em",
+                                    textTransform: "uppercase",
+                                  }}
+                                >
+                                  <div
+                                    className="status-dot-live"
+                                    style={{ width: "5px", height: "5px", borderRadius: "50%", background: "var(--color-risk-low)" }}
+                                  />
+                                  Active
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: "0.8125rem", color: "var(--color-text-tertiary)" }}>
+                                  Candidate
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
                 <div
                   style={{
-                    padding: "0.875rem 1rem",
-                    backgroundColor: "var(--color-surface-2)",
+                    padding: "0.875rem 1.125rem",
+                    background: "var(--color-surface-2)",
                     borderTop: "1px solid var(--color-border)",
                     fontSize: "0.8125rem",
                     color: "var(--color-text-secondary)",
+                    lineHeight: 1.6,
                   }}
                 >
                   <strong style={{ color: "var(--color-text-primary)" }}>Selection rationale:</strong>{" "}
@@ -165,133 +167,129 @@ export default function ModelPage() {
               </div>
             </motion.div>
 
-            {/* PR Curve-like visualization and Threshold Analysis side by side */}
+            {/* ── Charts row ──────────────────────────────────────────────── */}
             <motion.div
               variants={itemAnim}
               style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem" }}
+              className="model-charts-grid"
             >
-              {/* Precision-Recall trade-off */}
+              {/* PR Curve */}
               <div className="card" style={{ padding: "1.5rem" }}>
-                <div style={{ marginBottom: "1rem" }}>
-                  <div className="text-section-heading" style={{ marginBottom: "0.25rem" }}>
-                    Precision vs Recall Trade-off
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "0.8125rem",
-                      color: "var(--color-text-secondary)",
-                      padding: "0.5rem 0.75rem",
-                      backgroundColor: "var(--color-brand-subtle)",
-                      borderRadius: "4px",
-                      border: "1px solid var(--color-brand-border)",
-                      marginTop: "0.5rem",
-                    }}
-                  >
-                    PR-AUC = {(modelInfo.pr_auc * 100).toFixed(2)}% — Primary metric for rare-event fraud detection
-                  </div>
+                <div className="intelligence-label" style={{ marginBottom: "0.375rem" }}>
+                  Precision–Recall Curve
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.8125rem",
+                    padding: "0.5rem 0.875rem",
+                    background: "var(--color-brand-subtle)",
+                    border: "1px solid var(--color-brand-border)",
+                    borderRadius: "var(--radius-sm)",
+                    color: "var(--color-brand)",
+                    fontWeight: 600,
+                    marginBottom: "1.25rem",
+                    display: "inline-block",
+                  }}
+                >
+                  PR-AUC = {(modelInfo.pr_auc * 100).toFixed(2)}% — primary fraud metric
                 </div>
                 <ResponsiveContainer width="100%" height={240}>
                   <LineChart
                     data={analytics.threshold_analysis
                       .filter((_, i) => i % 3 === 0)
                       .map((t) => ({
-                        recall: t.recall,
-                        precision: t.precision,
-                        threshold: t.threshold,
+                        recall: +(t.recall * 100).toFixed(1),
+                        precision: +(t.precision * 100).toFixed(1),
                       }))}
                   >
                     <XAxis
                       dataKey="recall"
-                      label={{ value: "Recall", position: "insideBottom", offset: -2, fontSize: 11 }}
-                      domain={[0, 1]}
-                      tick={{ fontSize: 11, fill: "var(--color-text-tertiary)" }}
+                      label={{ value: "Recall (%)", position: "insideBottom", offset: -2, fontSize: 11, fill: "var(--color-text-tertiary)" }}
+                      domain={[0, 100]}
+                      tick={{ fontSize: 10, fill: "var(--color-text-tertiary)" }}
                       axisLine={false}
                       tickLine={false}
-                      tickFormatter={(v) => v.toFixed(1)}
                     />
                     <YAxis
-                      domain={[0, 1]}
-                      tick={{ fontSize: 11, fill: "var(--color-text-tertiary)" }}
+                      domain={[0, 100]}
+                      tick={{ fontSize: 10, fill: "var(--color-text-tertiary)" }}
                       axisLine={false}
                       tickLine={false}
-                      tickFormatter={(v) => v.toFixed(1)}
-                      label={{ value: "Precision", angle: -90, position: "insideLeft", offset: 10, fontSize: 11 }}
+                      label={{ value: "Precision (%)", angle: -90, position: "insideLeft", offset: 12, fontSize: 11, fill: "var(--color-text-tertiary)" }}
                     />
                     <Tooltip
-                      formatter={(v: number) => v.toFixed(4)}
-                      labelFormatter={(v) => `Recall: ${Number(v).toFixed(3)}`}
-                      contentStyle={{ background: "white", border: "1px solid var(--color-border)", borderRadius: "6px", fontSize: "0.8125rem" }}
+                      formatter={(v: any) => [`${Number(v ?? 0).toFixed(1)}%`, ""]}
+                      contentStyle={{ background: "white", border: "1px solid var(--color-border)", borderRadius: "8px", fontSize: "0.8125rem", boxShadow: "var(--shadow-elevated)" }}
                     />
-                    <Line
-                      type="monotone"
-                      dataKey="precision"
-                      stroke="#1A3A4A"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Precision"
-                    />
+                    <Line type="monotone" dataKey="precision" stroke="var(--color-chart-1)" strokeWidth={2.5} dot={false} name="Precision" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
 
               {/* F1 across thresholds */}
               <div className="card" style={{ padding: "1.5rem" }}>
-                <div style={{ marginBottom: "1rem" }}>
-                  <div className="text-section-heading" style={{ marginBottom: "0.25rem" }}>
-                    F1 Score Across Thresholds
-                  </div>
-                  <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-                    Optimal threshold selected at peak F1 on validation set
-                  </div>
+                <div className="intelligence-label" style={{ marginBottom: "0.375rem" }}>
+                  Threshold Performance
+                </div>
+                <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginBottom: "1.25rem" }}>
+                  F1, Precision, and Recall across decision thresholds
                 </div>
                 <ResponsiveContainer width="100%" height={240}>
-                  <LineChart
-                    data={analytics.threshold_analysis.filter((_, i) => i % 2 === 0)}
-                  >
+                  <LineChart data={analytics.threshold_analysis.filter((_, i) => i % 2 === 0)}>
                     <XAxis
                       dataKey="threshold"
-                      tick={{ fontSize: 11, fill: "var(--color-text-tertiary)" }}
+                      label={{ value: "Threshold", position: "insideBottom", offset: -2, fontSize: 11, fill: "var(--color-text-tertiary)" }}
+                      tick={{ fontSize: 10, fill: "var(--color-text-tertiary)" }}
                       axisLine={false}
                       tickLine={false}
                       tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
-                      label={{ value: "Threshold", position: "insideBottom", offset: -2, fontSize: 11 }}
                     />
                     <YAxis
                       domain={[0, 1]}
-                      tick={{ fontSize: 11, fill: "var(--color-text-tertiary)" }}
+                      tick={{ fontSize: 10, fill: "var(--color-text-tertiary)" }}
                       axisLine={false}
                       tickLine={false}
                       tickFormatter={(v) => v.toFixed(1)}
                     />
                     <Tooltip
-                      formatter={(v: number, name: string) => [v.toFixed(4), name]}
+                      formatter={(v: any, name: any) => [`${(Number(v ?? 0) * 100).toFixed(1)}%`, String(name ?? "")]}
                       labelFormatter={(v) => `Threshold: ${(Number(v) * 100).toFixed(0)}%`}
-                      contentStyle={{ background: "white", border: "1px solid var(--color-border)", borderRadius: "6px", fontSize: "0.8125rem" }}
+                      contentStyle={{ background: "white", border: "1px solid var(--color-border)", borderRadius: "8px", fontSize: "0.8125rem", boxShadow: "var(--shadow-elevated)" }}
                     />
                     <ReferenceLine
                       x={modelInfo.threshold}
                       stroke="var(--color-brand)"
-                      strokeDasharray="4 2"
-                      label={{ value: `Selected (${(modelInfo.threshold * 100).toFixed(0)}%)`, fill: "var(--color-brand)", fontSize: 11, position: "insideTopRight" }}
+                      strokeDasharray="5 3"
+                      label={{
+                        value: `Optimal (${(modelInfo.threshold * 100).toFixed(0)}%)`,
+                        fill: "var(--color-brand)",
+                        fontSize: 11,
+                        position: "insideTopRight",
+                        fontWeight: 700,
+                      }}
                     />
-                    <Line type="monotone" dataKey="f1" stroke="#1A3A4A" strokeWidth={2} dot={false} name="F1" />
-                    <Line type="monotone" dataKey="precision" stroke="#2D6A4F" strokeWidth={1.5} dot={false} name="Precision" strokeDasharray="3 2" />
-                    <Line type="monotone" dataKey="recall" stroke="#C1392B" strokeWidth={1.5} dot={false} name="Recall" strokeDasharray="3 2" />
-                    <Legend iconType="line" iconSize={12} formatter={(v) => <span style={{ fontSize: "0.8125rem" }}>{v}</span>} />
+                    <Legend
+                      iconType="line"
+                      iconSize={14}
+                      formatter={(v) => <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>{v}</span>}
+                    />
+                    <Line type="monotone" dataKey="f1" stroke="var(--color-chart-1)" strokeWidth={2.5} dot={false} name="F1" />
+                    <Line type="monotone" dataKey="precision" stroke="var(--color-risk-low)" strokeWidth={1.5} dot={false} name="Precision" strokeDasharray="4 2" />
+                    <Line type="monotone" dataKey="recall" stroke="var(--color-risk-high)" strokeWidth={1.5} dot={false} name="Recall" strokeDasharray="4 2" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </motion.div>
 
-            {/* Interactive threshold explorer */}
-            <motion.div variants={itemAnim} className="card" style={{ padding: "1.5rem" }}>
-              <div className="text-section-heading" style={{ marginBottom: "0.25rem" }}>
-                Threshold Explorer
+            {/* ── Threshold Intelligence ──────────────────────────────────── */}
+            <motion.div variants={itemAnim} className="card" style={{ padding: "1.75rem" }}>
+              <div className="intelligence-label" style={{ marginBottom: "0.375rem" }}>
+                Threshold Intelligence
               </div>
-              <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginBottom: "1.25rem" }}>
-                Explore how different thresholds affect performance metrics (validation set)
+              <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginBottom: "1.75rem" }}>
+                Explore how the decision threshold affects performance on the validation set
               </div>
-              {thresholdPreview !== null && analytics && (
+              {thresholdPreview !== null && (
                 <ThresholdExplorer
                   thresholdAnalysis={analytics.threshold_analysis}
                   selectedThreshold={modelInfo.threshold}
@@ -301,61 +299,89 @@ export default function ModelPage() {
               )}
             </motion.div>
 
-            {/* Final test metrics */}
+            {/* ── Final test metrics ──────────────────────────────────────── */}
             <motion.div variants={itemAnim}>
-              <div className="text-section-heading" style={{ marginBottom: "1rem" }}>
+              <div className="intelligence-label" style={{ marginBottom: "1rem" }}>
                 Final Evaluation — Held-out Test Set
               </div>
               <div className="card" style={{ padding: "1.5rem" }}>
+                <div style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", marginBottom: "1.25rem", lineHeight: 1.6 }}>
+                  Test set was <strong>not used</strong> during model selection or threshold optimization —
+                  these are unbiased performance estimates.
+                </div>
                 <div
                   style={{
-                    marginBottom: "1rem",
-                    fontSize: "0.875rem",
-                    color: "var(--color-text-secondary)",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(5, 1fr)",
+                    gap: "1rem",
                   }}
+                  className="metrics-grid"
                 >
-                  Test set was not used during model selection or threshold optimization.
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "1rem" }}>
                   {[
-                    { label: "Precision", value: modelInfo.precision },
-                    { label: "Recall", value: modelInfo.recall },
-                    { label: "F1 Score", value: modelInfo.f1 },
-                    { label: "PR-AUC", value: modelInfo.pr_auc, highlight: true },
-                    { label: "ROC-AUC", value: modelInfo.roc_auc },
+                    { label: "Precision", value: modelInfo.precision, note: "Fraud alerts that are real" },
+                    { label: "Recall", value: modelInfo.recall, note: "Fraud cases detected" },
+                    { label: "F1 Score", value: modelInfo.f1, note: "Precision-recall balance" },
+                    { label: "PR-AUC", value: modelInfo.pr_auc, primary: true, note: "Primary fraud metric" },
+                    { label: "ROC-AUC", value: modelInfo.roc_auc, note: "Overall discrimination" },
                   ].map((m) => (
                     <div
                       key={m.label}
                       style={{
-                        padding: "1rem",
-                        backgroundColor: m.highlight ? "var(--color-brand-subtle)" : "var(--color-surface-2)",
-                        border: `1px solid ${m.highlight ? "var(--color-brand-border)" : "var(--color-border)"}`,
-                        borderRadius: "var(--radius-md)",
+                        padding: "1.125rem",
+                        background: m.primary ? "var(--color-brand-subtle)" : "var(--color-surface-2)",
+                        border: `1px solid ${m.primary ? "var(--color-brand-border)" : "var(--color-border)"}`,
+                        borderRadius: "var(--radius-lg)",
                         textAlign: "center",
+                        position: "relative",
+                        overflow: "hidden",
                       }}
                     >
+                      {m.primary && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: "3px",
+                            background: "var(--color-brand)",
+                          }}
+                        />
+                      )}
                       <div
                         style={{
-                          fontSize: "0.6875rem",
-                          fontWeight: 600,
-                          letterSpacing: "0.08em",
+                          fontSize: "0.6rem",
+                          fontWeight: 700,
+                          letterSpacing: "0.10em",
                           textTransform: "uppercase",
-                          color: m.highlight ? "var(--color-brand)" : "var(--color-text-tertiary)",
-                          marginBottom: "0.5rem",
+                          color: m.primary ? "var(--color-brand)" : "var(--color-text-tertiary)",
+                          marginBottom: "0.625rem",
                         }}
                       >
                         {m.label}
                       </div>
                       <div
                         style={{
-                          fontSize: "1.375rem",
+                          fontSize: "1.625rem",
                           fontWeight: 800,
                           color: "var(--color-text-primary)",
                           fontVariantNumeric: "tabular-nums",
-                          letterSpacing: "-0.02em",
+                          letterSpacing: "-0.03em",
+                          marginBottom: "0.5rem",
                         }}
                       >
                         {(m.value * 100).toFixed(2)}%
+                      </div>
+                      <div style={{ height: "4px", background: "var(--color-border)", borderRadius: "2px", overflow: "hidden" }}>
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${m.value * 100}%` }}
+                          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                          style={{ height: "100%", background: m.primary ? "var(--color-brand)" : "var(--color-accent)", borderRadius: "2px", opacity: 0.7 }}
+                        />
+                      </div>
+                      <div style={{ fontSize: "0.6875rem", color: "var(--color-text-tertiary)", marginTop: "0.4rem" }}>
+                        {m.note}
                       </div>
                     </div>
                   ))}
@@ -365,10 +391,21 @@ export default function ModelPage() {
           </motion.div>
         ) : null}
       </main>
+
+      <style>{`
+        @media (max-width: 900px) {
+          .model-charts-grid { grid-template-columns: 1fr !important; }
+          .metrics-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+        @media (max-width: 500px) {
+          .metrics-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }
 
+/* ─── Threshold Explorer ──────────────────────────────────────────────────── */
 function ThresholdExplorer({
   thresholdAnalysis,
   selectedThreshold,
@@ -384,34 +421,20 @@ function ThresholdExplorer({
     Math.abs(curr.threshold - preview) < Math.abs(prev.threshold - preview) ? curr : prev
   );
 
+  const optimalPct = ((selectedThreshold - 0.1) / 0.89) * 100;
+
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "1.25rem" }}>
-        <span style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", flexShrink: 0 }}>0%</span>
-        <div style={{ flex: 1, position: "relative" }}>
-          <input
-            type="range"
-            min={0.1}
-            max={0.99}
-            step={0.01}
-            value={preview}
-            onChange={(e) => setPreview(parseFloat(e.target.value))}
-            style={{
-              width: "100%",
-              appearance: "none",
-              height: "4px",
-              borderRadius: "2px",
-              backgroundColor: "var(--color-border)",
-              cursor: "pointer",
-              outline: "none",
-            }}
-          />
-          {/* Selected threshold marker */}
+      {/* Slider */}
+      <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", marginBottom: "1.5rem" }}>
+        <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", flexShrink: 0, fontFamily: "var(--font-mono)" }}>10%</span>
+        <div style={{ flex: 1, position: "relative", paddingTop: "1.5rem" }}>
+          {/* Optimal marker */}
           <div
             style={{
               position: "absolute",
-              left: `${(selectedThreshold - 0.1) / 0.89 * 100}%`,
-              top: "-14px",
+              left: `${optimalPct}%`,
+              top: 0,
               transform: "translateX(-50%)",
               fontSize: "0.6875rem",
               color: "var(--color-brand)",
@@ -421,33 +444,101 @@ function ThresholdExplorer({
           >
             ▼ Optimal
           </div>
+          <input
+            type="range"
+            min={0.1}
+            max={0.99}
+            step={0.01}
+            value={preview}
+            onChange={(e) => setPreview(parseFloat(e.target.value))}
+            style={{ width: "100%" }}
+            aria-label="Threshold value"
+          />
         </div>
-        <span style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", flexShrink: 0 }}>100%</span>
+        <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", flexShrink: 0, fontFamily: "var(--font-mono)" }}>99%</span>
         <span
           style={{
             fontFamily: "var(--font-mono)",
-            fontSize: "0.9375rem",
-            fontWeight: 700,
+            fontSize: "1.125rem",
+            fontWeight: 800,
             color: "var(--color-text-primary)",
-            minWidth: "48px",
+            minWidth: "52px",
+            textAlign: "right",
           }}
         >
           {(preview * 100).toFixed(0)}%
         </span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "0.75rem" }}>
-        <ThresholdMetric label="F1" value={closestPoint.f1} />
+
+      {/* Metrics */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(5, 1fr)",
+          gap: "0.75rem",
+        }}
+        className="threshold-metrics"
+      >
+        <ThresholdMetric label="F1 Score" value={closestPoint.f1} />
         <ThresholdMetric label="Precision" value={closestPoint.precision} />
         <ThresholdMetric label="Recall" value={closestPoint.recall} />
-        <div style={{ padding: "0.875rem", backgroundColor: "var(--color-risk-review-bg)", border: "1px solid var(--color-risk-review-border)", borderRadius: "var(--radius-md)", textAlign: "center" }}>
-          <div style={{ fontSize: "0.6875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-risk-review)", marginBottom: "0.375rem" }}>False Pos.</div>
-          <div style={{ fontSize: "1.125rem", fontWeight: 700, color: "var(--color-text-primary)" }}>{closestPoint.false_positives}</div>
+        <div
+          style={{
+            padding: "0.875rem",
+            background: "var(--color-risk-review-bg)",
+            border: "1px solid var(--color-risk-review-border)",
+            borderRadius: "var(--radius-md)",
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--color-risk-review)", marginBottom: "0.375rem" }}>
+            False Positives
+          </div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={closestPoint.false_positives}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}
+            >
+              {closestPoint.false_positives}
+            </motion.div>
+          </AnimatePresence>
+          <div style={{ fontSize: "0.6875rem", color: "var(--color-text-tertiary)" }}>false alerts</div>
         </div>
-        <div style={{ padding: "0.875rem", backgroundColor: "var(--color-risk-high-bg)", border: "1px solid var(--color-risk-high-border)", borderRadius: "var(--radius-md)", textAlign: "center" }}>
-          <div style={{ fontSize: "0.6875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-risk-high)", marginBottom: "0.375rem" }}>False Neg.</div>
-          <div style={{ fontSize: "1.125rem", fontWeight: 700, color: "var(--color-text-primary)" }}>{closestPoint.false_negatives}</div>
+        <div
+          style={{
+            padding: "0.875rem",
+            background: "var(--color-risk-high-bg)",
+            border: "1px solid var(--color-risk-high-border)",
+            borderRadius: "var(--radius-md)",
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--color-risk-high)", marginBottom: "0.375rem" }}>
+            False Negatives
+          </div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={closestPoint.false_negatives}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}
+            >
+              {closestPoint.false_negatives}
+            </motion.div>
+          </AnimatePresence>
+          <div style={{ fontSize: "0.6875rem", color: "var(--color-text-tertiary)" }}>fraud missed</div>
         </div>
       </div>
+
+      <style>{`
+        @media (max-width: 700px) {
+          .threshold-metrics { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -457,34 +548,26 @@ function ThresholdMetric({ label, value }: { label: string; value: number }) {
     <div
       style={{
         padding: "0.875rem",
-        backgroundColor: "var(--color-surface-2)",
+        background: "var(--color-surface-2)",
         border: "1px solid var(--color-border)",
         borderRadius: "var(--radius-md)",
         textAlign: "center",
       }}
     >
-      <div
-        style={{
-          fontSize: "0.6875rem",
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: "0.06em",
-          color: "var(--color-text-tertiary)",
-          marginBottom: "0.375rem",
-        }}
-      >
+      <div style={{ fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--color-text-tertiary)", marginBottom: "0.375rem" }}>
         {label}
       </div>
-      <div
-        style={{
-          fontSize: "1.125rem",
-          fontWeight: 700,
-          color: "var(--color-text-primary)",
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
-        {(value * 100).toFixed(1)}%
-      </div>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={value.toFixed(4)}
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}
+        >
+          {(value * 100).toFixed(1)}%
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
@@ -512,8 +595,8 @@ function LoadingState() {
       </div>
       <div className="card" style={{ height: "200px" }} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem" }}>
-        <div className="card" style={{ height: "280px" }} />
-        <div className="card" style={{ height: "280px" }} />
+        <div className="card" style={{ height: "300px" }} />
+        <div className="card" style={{ height: "300px" }} />
       </div>
     </div>
   );

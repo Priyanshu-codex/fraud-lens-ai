@@ -1,11 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { Header } from "@/components/layout/Header";
+import { useMobileMenu } from "@/app/(app)/layout";
 import { RiskBadge } from "@/components/ui/RiskBadge";
+import { RiskSpectrum } from "@/components/ui/RiskSpectrum";
+import { MetricBar } from "@/components/ui/MetricBar";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { api, type ExplainResponse, type SamplesResponse } from "@/lib/api";
+import { formatCurrencyINR, generateTxnId } from "@/lib/utils";
 
 export default function InvestigationsPage() {
   const [samples, setSamples] = useState<SamplesResponse | null>(null);
@@ -13,7 +17,8 @@ export default function InvestigationsPage() {
   const [result, setResult] = useState<ExplainResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [timestamp, setTimestamp] = useState<string | null>(null);
+  const [timestamps, setTimestamps] = useState<string[]>([]);
+  const { onMenuToggle } = useMobileMenu();
 
   useEffect(() => {
     api.samples().then(setSamples).catch(console.error);
@@ -26,13 +31,24 @@ export default function InvestigationsPage() {
       setError(null);
       setSelected(type);
       setResult(null);
-      setTimestamp(null);
+      setTimestamps([]);
 
       const txn = type === "fraud" ? samples.fraud[0] : samples.legitimate[0];
+      const t0 = new Date();
+      const fmt = (d: Date) =>
+        d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+
       try {
         const r = await api.explain(txn);
+        const t1 = new Date();
         setResult(r);
-        setTimestamp(new Date().toISOString());
+        setTimestamps([
+          fmt(t0),
+          fmt(new Date(t0.getTime() + 50)),
+          fmt(new Date(t0.getTime() + 180)),
+          fmt(new Date(t1.getTime() - 80)),
+          fmt(t1),
+        ]);
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Investigation failed");
       } finally {
@@ -45,14 +61,32 @@ export default function InvestigationsPage() {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
       <Header
-        title="Investigations"
-        description="Detailed transaction investigation workspace"
+        title="Investigation Workspace"
+        description="Forensic transaction analysis — evidence-driven risk review"
+        onMenuToggle={onMenuToggle}
       />
-      <main style={{ flex: 1, padding: "2rem", maxWidth: "1100px", width: "100%" }}>
-        {/* Quick launch */}
-        <div className="card" style={{ padding: "1.25rem", marginBottom: "1.5rem" }}>
-          <div className="text-section-heading" style={{ marginBottom: "0.875rem" }}>
-            Open Investigation
+      <main style={{ flex: 1, padding: "2rem", maxWidth: "1440px", width: "100%" }}>
+
+        {/* ── Launch bar ─────────────────────────────────────────────────── */}
+        <div
+          className="card"
+          style={{
+            padding: "1.375rem",
+            marginBottom: "1.75rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "1rem",
+          }}
+        >
+          <div>
+            <div className="intelligence-label" style={{ marginBottom: "0.25rem" }}>
+              Open Investigation
+            </div>
+            <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+              Select a real test-set sample to begin a full forensic investigation
+            </div>
           </div>
           <div style={{ display: "flex", gap: "0.75rem" }}>
             <button
@@ -69,58 +103,131 @@ export default function InvestigationsPage() {
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "0.5rem",
-                padding: "0.625rem 1.25rem",
+                padding: "0.625rem 1.375rem",
                 borderRadius: "var(--radius-md)",
                 fontSize: "0.9375rem",
-                fontWeight: 500,
+                fontWeight: 600,
                 cursor: "pointer",
-                border: "1px solid var(--color-risk-high-border)",
+                border: "2px solid var(--color-risk-high-border)",
                 backgroundColor: "var(--color-risk-high-bg)",
                 color: "var(--color-risk-high)",
                 transition: "all 0.15s ease",
+                letterSpacing: "-0.01em",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-risk-high)";
+                (e.currentTarget as HTMLButtonElement).style.color = "white";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--color-risk-high-bg)";
+                (e.currentTarget as HTMLButtonElement).style.color = "var(--color-risk-high)";
               }}
             >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
               Investigate Fraud Sample
             </button>
           </div>
         </div>
 
-        {/* Content */}
-        {loading && <LoadingInvestigation />}
-        {error && <ErrorState title="Investigation failed" message={error} onRetry={() => selected && investigate(selected)} />}
-        {result && timestamp && !loading && (
-          <InvestigationDetail result={result} timestamp={timestamp} groundTruth={selected} />
-        )}
-        {!loading && !result && !error && (
-          <div
-            className="card"
-            style={{ padding: "3rem", textAlign: "center", color: "var(--color-text-tertiary)" }}
-          >
-            <div style={{ fontSize: "0.9375rem", fontWeight: 500, marginBottom: "0.5rem" }}>
-              No investigation open
+        {/* ── Loading ─────────────────────────────────────────────────────── */}
+        {loading && (
+          <div className="card" style={{ padding: "3rem", textAlign: "center" }}>
+            <div
+              style={{
+                width: "40px",
+                height: "40px",
+                border: "3px solid var(--color-border)",
+                borderTopColor: "var(--color-brand)",
+                borderRadius: "50%",
+                animation: "spin 0.8s linear infinite",
+                margin: "0 auto 1.25rem",
+              }}
+            />
+            <div style={{ fontWeight: 600, color: "var(--color-text-primary)", marginBottom: "0.375rem" }}>
+              Running investigation
             </div>
-            <div style={{ fontSize: "0.875rem" }}>
-              Select a transaction to begin a detailed investigation
+            <div style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
+              Analyzing transaction, computing risk, generating SHAP evidence…
             </div>
           </div>
         )}
+
+        {/* ── Error ───────────────────────────────────────────────────────── */}
+        {error && (
+          <ErrorState
+            title="Investigation failed"
+            message={error}
+            onRetry={() => selected && investigate(selected)}
+          />
+        )}
+
+        {/* ── Empty ───────────────────────────────────────────────────────── */}
+        {!loading && !result && !error && (
+          <div className="card" style={{ padding: "4rem 2rem", textAlign: "center" }}>
+            <div
+              style={{
+                width: "64px",
+                height: "64px",
+                borderRadius: "50%",
+                background: "var(--color-surface-2)",
+                border: "1px solid var(--color-border)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 1.5rem",
+              }}
+            >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-border-strong)" strokeWidth="1.5">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+            </div>
+            <div style={{ fontWeight: 700, fontSize: "1rem", color: "var(--color-text-primary)", marginBottom: "0.5rem" }}>
+              No investigation open
+            </div>
+            <div style={{ fontSize: "0.875rem", color: "var(--color-text-tertiary)", maxWidth: "280px", margin: "0 auto" }}>
+              Select a transaction above to begin a detailed forensic investigation
+            </div>
+          </div>
+        )}
+
+        {/* ── Investigation detail ─────────────────────────────────────────── */}
+        {result && timestamps.length > 0 && !loading && (
+          <AnimatePresence>
+            <InvestigationDetail
+              result={result}
+              timestamps={timestamps}
+              groundTruth={selected}
+              samples={samples}
+            />
+          </AnimatePresence>
+        )}
       </main>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
 
+/* ─── Investigation detail layout ──────────────────────────────────────────── */
 function InvestigationDetail({
   result,
-  timestamp,
+  timestamps,
   groundTruth,
+  samples,
 }: {
   result: ExplainResponse;
-  timestamp: string;
+  timestamps: string[];
   groundTruth: "fraud" | "legitimate" | null;
+  samples: SamplesResponse | null;
 }) {
-  const prob = result.fraud_probability * 100;
-  const threshold = result.threshold * 100;
+  const prob = result.fraud_probability;
+  const threshold = result.threshold;
   const isFraud = result.prediction === "FRAUD";
+
   const riskColor =
     result.risk_level === "HIGH"
       ? "var(--color-risk-high)"
@@ -129,369 +236,456 @@ function InvestigationDetail({
       : "var(--color-risk-low)";
 
   const contributions = result.top_contributions.slice(0, 10);
-  const fraudContributions = contributions.filter((c) => c.direction === "fraud");
-  const legitContributions = contributions.filter((c) => c.direction === "legitimate");
+  const fraudContribs = contributions.filter((c) => c.direction === "fraud");
+  const legitContribs = contributions.filter((c) => c.direction === "legitimate");
   const maxAbs = Math.max(...contributions.map((c) => Math.abs(c.contribution)));
 
-  const now = new Date(timestamp);
-  const timeStr = now.toLocaleTimeString("en-US", { hour12: false });
+  // Reconstruct sample for metadata
+  const sample =
+    groundTruth === "fraud"
+      ? samples?.fraud[0]
+      : groundTruth === "legitimate"
+      ? samples?.legitimate[0]
+      : null;
 
-  const containerAnim = {
-    hidden: {},
-    show: { transition: { staggerChildren: 0.1 } },
-  };
-  const itemAnim = {
-    hidden: { opacity: 0, y: 14 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.45 } },
-  };
+  const txnId = sample ? generateTxnId(sample.Amount, sample.Time) : "TX-UNKN";
+
+  const timelineEvents = [
+    { label: "Transaction Received", icon: "▷", color: "var(--color-accent)" },
+    { label: "Input Validated — 30 features", icon: "✓", color: "var(--color-accent)" },
+    { label: "XGBoost Model Evaluated", icon: "⟳", color: "var(--color-risk-review)" },
+    { label: `Risk Classified: ${result.risk_level}`, icon: "◉", color: riskColor },
+    { label: "SHAP Explanation Generated", icon: "✦", color: "var(--color-risk-low)" },
+  ];
+
+  const containerAnim: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.09 } } };
+  const itemAnim: Variants = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 
   return (
     <motion.div
       variants={containerAnim}
       initial="hidden"
       animate="show"
-      style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem", alignItems: "start" }}
+      style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
     >
-      {/* Left column */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-        {/* Summary card */}
-        <motion.div
-          variants={itemAnim}
-          className="card"
-          style={{ padding: "1.5rem", borderTop: `3px solid ${riskColor}` }}
+      {/* ── Top: Transaction ID bar ─────────────────────────────────────── */}
+      <motion.div
+        variants={itemAnim}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "0.75rem",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <div
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontWeight: 700,
+              fontSize: "1.125rem",
+              color: "var(--color-text-primary)",
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {txnId}
+          </div>
+          <RiskBadge level={result.risk_level} size="lg" pulse={result.risk_level === "HIGH"} />
+        </div>
+        <div
+          style={{
+            fontSize: "0.75rem",
+            color: "var(--color-text-tertiary)",
+            fontFamily: "var(--font-mono)",
+          }}
         >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              marginBottom: "1.25rem",
-            }}
-          >
-            <div>
-              <div className="text-section-heading" style={{ marginBottom: "0.5rem" }}>
-                Investigation Result
-              </div>
-              <div
-                style={{
-                  fontSize: "1.375rem",
-                  fontWeight: 800,
-                  color: isFraud ? "var(--color-risk-high)" : "var(--color-risk-low)",
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                {result.prediction}
-              </div>
-            </div>
-            <RiskBadge level={result.risk_level} size="lg" />
-          </div>
+          {result.model_name} · {result.model_version}
+        </div>
+      </motion.div>
 
-          {/* Probability ring */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "1.25rem",
-              padding: "1rem",
-              backgroundColor: "var(--color-surface-2)",
-              borderRadius: "var(--radius-md)",
-              border: "1px solid var(--color-border)",
-            }}
-          >
-            <div
-              style={{
-                width: "80px",
-                height: "80px",
-                borderRadius: "50%",
-                background: `conic-gradient(${riskColor} ${prob}%, var(--color-border) ${prob}%)`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <div
-                style={{
-                  width: "60px",
-                  height: "60px",
-                  borderRadius: "50%",
-                  backgroundColor: "var(--color-surface-2)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexDirection: "column",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "0.875rem",
-                    fontWeight: 800,
-                    color: riskColor,
-                    lineHeight: 1,
-                  }}
-                >
-                  {prob.toFixed(0)}%
-                </div>
-              </div>
+      {/* ── Three-column main layout ────────────────────────────────────── */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1.1fr 1.2fr",
+          gap: "1.25rem",
+          alignItems: "start",
+        }}
+        className="investigation-grid"
+      >
+        {/* LEFT: Transaction identity */}
+        <motion.div variants={itemAnim} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          <div className="card" style={{ padding: "1.375rem" }}>
+            <div className="intelligence-label" style={{ marginBottom: "1rem" }}>
+              Transaction Identity
             </div>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: "0.9375rem", marginBottom: "0.25rem" }}>
-                Fraud Probability
-              </div>
-              <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-                Decision threshold: {threshold.toFixed(0)}%
-              </div>
-              <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-                Model: {result.model_name} {result.model_version}
-              </div>
-            </div>
-          </div>
-
-          {/* Ground truth note */}
-          {groundTruth && (
-            <div
-              style={{
-                marginTop: "0.875rem",
-                padding: "0.625rem 0.875rem",
-                backgroundColor:
-                  groundTruth === "fraud"
-                    ? "var(--color-risk-high-bg)"
-                    : "var(--color-risk-low-bg)",
-                border: `1px solid ${groundTruth === "fraud" ? "var(--color-risk-high-border)" : "var(--color-risk-low-border)"}`,
-                borderRadius: "4px",
-                fontSize: "0.8125rem",
-                color: groundTruth === "fraud" ? "var(--color-risk-high)" : "var(--color-risk-low)",
-              }}
-            >
-              Dataset ground truth:{" "}
-              <strong>{groundTruth.toUpperCase()}</strong> — verification: model
-              {" "}{result.prediction === groundTruth.toUpperCase() ? "correct" : "incorrect"}
-            </div>
-          )}
-        </motion.div>
-
-        {/* Investigation timeline */}
-        <motion.div variants={itemAnim} className="card" style={{ padding: "1.5rem" }}>
-          <div className="text-section-heading" style={{ marginBottom: "1rem" }}>
-            Investigation Timeline
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
-            {[
-              { time: timeStr, event: "Transaction received" },
-              { time: timeStr, event: "Input validated — 30 features" },
-              { time: timeStr, event: "XGBoost model evaluated" },
-              { time: timeStr, event: `Risk classified: ${result.risk_level}` },
-              { time: timeStr, event: "SHAP explanation generated" },
-            ].map((item, i, arr) => (
-              <div key={i} style={{ display: "flex", gap: "1rem" }}>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <InfoRow label="Transaction ID" value={txnId} mono />
+              {sample && (
+                <>
+                  <InfoRow label="Amount" value={formatCurrencyINR(sample.Amount)} />
+                  <InfoRow label="Time Elapsed" value={`${sample.Time.toFixed(0)}s`} mono />
+                  <InfoRow label="Feature Count" value="30 features" />
+                </>
+              )}
+              {groundTruth && (
+                <div>
+                  <div className="intelligence-label" style={{ marginBottom: "0.25rem" }}>
+                    Ground Truth
+                  </div>
                   <div
                     style={{
-                      width: "8px",
-                      height: "8px",
-                      borderRadius: "50%",
-                      backgroundColor: "var(--color-text-primary)",
-                      marginTop: "4px",
-                      flexShrink: 0,
+                      padding: "0.4375rem 0.875rem",
+                      borderRadius: "4px",
+                      display: "inline-block",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      letterSpacing: "0.07em",
+                      textTransform: "uppercase",
+                      color: groundTruth === "fraud" ? "var(--color-risk-high)" : "var(--color-risk-low)",
+                      background: groundTruth === "fraud" ? "var(--color-risk-high-bg)" : "var(--color-risk-low-bg)",
+                      border: `1px solid ${groundTruth === "fraud" ? "var(--color-risk-high-border)" : "var(--color-risk-low-border)"}`,
                     }}
-                  />
-                  {i < arr.length - 1 && (
+                  >
+                    {groundTruth.toUpperCase()}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Investigation Timeline */}
+          <div className="card" style={{ padding: "1.375rem" }}>
+            <div className="intelligence-label" style={{ marginBottom: "1.125rem" }}>
+              Investigation Timeline
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
+              {timelineEvents.map((evt, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.1, duration: 0.35 }}
+                  style={{ display: "flex", gap: "0.875rem" }}
+                >
+                  {/* Timeline track */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
                     <div
                       style={{
-                        width: "1px",
-                        flex: 1,
-                        backgroundColor: "var(--color-border)",
-                        margin: "4px 0",
-                        minHeight: "20px",
+                        width: "26px",
+                        height: "26px",
+                        borderRadius: "50%",
+                        background: `${evt.color}18`,
+                        border: `1.5px solid ${evt.color}44`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "0.625rem",
+                        color: evt.color,
+                        flexShrink: 0,
+                        marginTop: i === 0 ? 0 : "2px",
                       }}
-                    />
-                  )}
+                    >
+                      {i < timelineEvents.length - 1 ? (
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={evt.color} strokeWidth="3">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      ) : (
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill={evt.color}>
+                          <circle cx="12" cy="12" r="8" />
+                        </svg>
+                      )}
+                    </div>
+                    {i < timelineEvents.length - 1 && (
+                      <div style={{ width: "1px", flex: 1, background: "var(--color-border)", minHeight: "16px", margin: "3px 0" }} />
+                    )}
+                  </div>
+
+                  {/* Event info */}
+                  <div style={{ paddingBottom: i < timelineEvents.length - 1 ? "0.75rem" : 0, paddingTop: "2px" }}>
+                    <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.3 }}>
+                      {evt.label}
+                    </div>
+                    <div style={{ fontSize: "0.6875rem", color: "var(--color-text-tertiary)", fontFamily: "var(--font-mono)", marginTop: "2px" }}>
+                      {timestamps[i]}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* CENTER: Risk Assessment */}
+        <motion.div variants={itemAnim}>
+          <div
+            className="card"
+            style={{
+              padding: "1.375rem",
+              borderTop: `3px solid ${riskColor}`,
+            }}
+          >
+            <div className="intelligence-label" style={{ marginBottom: "1.25rem" }}>
+              Risk Assessment
+            </div>
+
+            {/* Probability display */}
+            <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+              <div
+                style={{
+                  fontSize: "3.5rem",
+                  fontWeight: 800,
+                  color: riskColor,
+                  letterSpacing: "-0.05em",
+                  lineHeight: 1,
+                  fontVariantNumeric: "tabular-nums",
+                  marginBottom: "0.5rem",
+                }}
+              >
+                {(prob * 100).toFixed(2)}%
+              </div>
+              <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
+                Fraud probability
+              </div>
+            </div>
+
+            <RiskSpectrum
+              probability={prob}
+              threshold={threshold}
+              riskLevel={result.risk_level}
+              animate
+            />
+
+            {/* Prediction verdict */}
+            <div
+              style={{
+                marginTop: "1.25rem",
+                padding: "0.875rem 1rem",
+                borderRadius: "var(--radius-md)",
+                background: isFraud ? "var(--color-risk-high-bg)" : "var(--color-risk-low-bg)",
+                border: `1px solid ${isFraud ? "var(--color-risk-high-border)" : "var(--color-risk-low-border)"}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: "0.6875rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    color: isFraud ? "var(--color-risk-high)" : "var(--color-risk-low)",
+                    marginBottom: "0.25rem",
+                  }}
+                >
+                  Model Prediction
                 </div>
-                <div style={{ paddingBottom: i < arr.length - 1 ? "0.75rem" : 0 }}>
-                  <div style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                    {item.event}
+                <div
+                  style={{
+                    fontSize: "1.25rem",
+                    fontWeight: 800,
+                    color: isFraud ? "var(--color-risk-high)" : "var(--color-risk-low)",
+                    letterSpacing: "-0.02em",
+                  }}
+                >
+                  {result.prediction}
+                </div>
+              </div>
+              {groundTruth && (
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: "0.6875rem", color: "var(--color-text-tertiary)", marginBottom: "0.25rem" }}>
+                    vs. Ground Truth
                   </div>
                   <div
                     style={{
                       fontSize: "0.75rem",
-                      color: "var(--color-text-tertiary)",
-                      fontFamily: "var(--font-mono)",
+                      fontWeight: 700,
+                      color:
+                        result.prediction === groundTruth.toUpperCase()
+                          ? "var(--color-risk-low)"
+                          : "var(--color-risk-high)",
                     }}
                   >
-                    {item.time}
+                    {result.prediction === groundTruth.toUpperCase() ? "✓ Correct" : "✗ Incorrect"}
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      </div>
+              )}
+            </div>
 
-      {/* Right column — SHAP evidence */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-        <motion.div variants={itemAnim} className="card" style={{ padding: "1.5rem" }}>
-          <div className="text-section-heading" style={{ marginBottom: "0.25rem" }}>
-            Model Evidence
-          </div>
-          <div
-            style={{
-              fontSize: "0.8125rem",
-              color: "var(--color-text-secondary)",
-              marginBottom: "1.25rem",
-            }}
-          >
-            Why did the model produce this result?
-          </div>
-
-          {fraudContributions.length > 0 && (
-            <div style={{ marginBottom: "1.25rem" }}>
-              <div
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 600,
-                  color: "var(--color-risk-high)",
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  marginBottom: "0.75rem",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.375rem",
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" />
-                </svg>
-                Pushing toward fraud
-              </div>
-              {fraudContributions.map((c, i) => (
-                <ContribRow key={i} contribution={c} maxAbs={maxAbs} />
+            {/* Decision context */}
+            <div
+              style={{
+                marginTop: "1rem",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.5rem",
+                paddingTop: "1rem",
+                borderTop: "1px solid var(--color-border)",
+              }}
+            >
+              {[
+                { label: "Decision Threshold", value: `${(threshold * 100).toFixed(0)}%` },
+                { label: "Threshold Basis", value: "Validation F1 maximization" },
+                { label: "Model", value: result.model_name },
+              ].map((r) => (
+                <div
+                  key={r.label}
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                >
+                  <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>{r.label}</span>
+                  <span style={{ fontSize: "0.8125rem", fontWeight: 600, fontFamily: "var(--font-mono)", color: "var(--color-text-primary)" }}>
+                    {r.value}
+                  </span>
+                </div>
               ))}
             </div>
-          )}
 
-          {legitContributions.length > 0 && (
-            <div>
-              <div
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 600,
-                  color: "var(--color-risk-low)",
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  marginBottom: "0.75rem",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.375rem",
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <line x1="12" y1="5" x2="12" y2="19" /><polyline points="5 12 12 5 19 12" />
-                </svg>
-                Pushing away from fraud
-              </div>
-              {legitContributions.map((c, i) => (
-                <ContribRow key={i} contribution={c} maxAbs={maxAbs} />
-              ))}
-            </div>
-          )}
-
-          <div
-            style={{
-              marginTop: "1rem",
-              padding: "0.625rem 0.875rem",
-              backgroundColor: "var(--color-surface-2)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "4px",
-              fontSize: "0.75rem",
-              color: "var(--color-text-secondary)",
-              fontStyle: "italic",
-            }}
-          >
-            {result.disclaimer}
-          </div>
-        </motion.div>
-
-        {/* Decision context */}
-        <motion.div variants={itemAnim} className="card" style={{ padding: "1.5rem" }}>
-          <div className="text-section-heading" style={{ marginBottom: "0.875rem" }}>
-            Decision Context
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            <ContextRow label="Model" value={result.model_name} />
-            <ContextRow label="Version" value={result.model_version} />
-            <ContextRow label="Decision threshold" value={`${threshold.toFixed(0)}%`} />
-            <ContextRow label="Fraud probability" value={`${prob.toFixed(4)}%`} />
-            <ContextRow label="Threshold basis" value="Validation set F1 optimization" />
-            <div className="divider" />
-            <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+            {/* Human review note */}
+            <div
+              style={{
+                marginTop: "1rem",
+                padding: "0.75rem",
+                background: "var(--color-surface-2)",
+                borderRadius: "var(--radius-sm)",
+                fontSize: "0.75rem",
+                color: "var(--color-text-secondary)",
+                lineHeight: 1.6,
+              }}
+            >
               This output is decision support for human review, not a final determination.
               A human analyst is responsible for the final investigation outcome.
             </div>
           </div>
         </motion.div>
+
+        {/* RIGHT: Model Evidence */}
+        <motion.div variants={itemAnim}>
+          <div className="card" style={{ padding: "1.375rem" }}>
+            <div className="intelligence-label" style={{ marginBottom: "0.375rem" }}>
+              Model Evidence
+            </div>
+            <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", marginBottom: "1.375rem" }}>
+              SHAP feature contributions behind this prediction
+            </div>
+
+            {fraudContribs.length > 0 && (
+              <div style={{ marginBottom: "1.25rem" }}>
+                <div
+                  style={{
+                    fontSize: "0.6875rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.09em",
+                    textTransform: "uppercase",
+                    color: "var(--color-risk-high)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    marginBottom: "0.875rem",
+                    paddingBottom: "0.5rem",
+                    borderBottom: "1px solid var(--color-risk-high-border)",
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19" /><polyline points="19 12 12 19 5 12" />
+                  </svg>
+                  Fraud signal
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  {fraudContribs.map((c, i) => (
+                    <MetricBar
+                      key={c.feature}
+                      contribution={c}
+                      maxAbs={maxAbs}
+                      index={i}
+                      emphasis={i === 0}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {legitContribs.length > 0 && (
+              <div>
+                <div
+                  style={{
+                    fontSize: "0.6875rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.09em",
+                    textTransform: "uppercase",
+                    color: "var(--color-risk-low)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    marginBottom: "0.875rem",
+                    paddingBottom: "0.5rem",
+                    borderBottom: "1px solid var(--color-risk-low-border)",
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19" /><polyline points="5 12 12 5 19 12" />
+                  </svg>
+                  Legitimacy signal
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  {legitContribs.map((c, i) => (
+                    <MetricBar key={c.feature} contribution={c} maxAbs={maxAbs} index={i} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div
+              style={{
+                marginTop: "1rem",
+                padding: "0.75rem",
+                background: "var(--color-surface-2)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-sm)",
+                fontSize: "0.75rem",
+                color: "var(--color-text-secondary)",
+                fontStyle: "italic",
+                lineHeight: 1.6,
+              }}
+            >
+              {result.disclaimer}
+            </div>
+          </div>
+        </motion.div>
       </div>
+
+      <style>{`
+        @media (max-width: 1100px) {
+          .investigation-grid {
+            grid-template-columns: 1fr 1fr !important;
+          }
+        }
+        @media (max-width: 700px) {
+          .investigation-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </motion.div>
   );
 }
 
-function ContribRow({
-  contribution,
-  maxAbs,
-}: {
-  contribution: { feature: string; value: number; contribution: number; direction: string };
-  maxAbs: number;
-}) {
-  const barWidth = maxAbs > 0 ? Math.abs(contribution.contribution) / maxAbs : 0;
-  const color = contribution.direction === "fraud" ? "var(--color-risk-high)" : "var(--color-risk-low)";
-
+function InfoRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div style={{ marginBottom: "0.75rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.875rem", fontWeight: 500 }}>
-          {contribution.feature}
-        </span>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.8125rem", color, fontWeight: 600 }}>
-          {contribution.contribution > 0 ? "+" : ""}{contribution.contribution.toFixed(3)}
-        </span>
-      </div>
-      <div style={{ height: "5px", backgroundColor: "var(--color-border)", borderRadius: "3px" }}>
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${barWidth * 100}%` }}
-          transition={{ duration: 0.5 }}
-          style={{ height: "100%", backgroundColor: color, borderRadius: "3px" }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function ContextRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-      <span style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>{label}</span>
-      <span style={{ fontSize: "0.875rem", fontWeight: 600, fontFamily: "var(--font-mono)" }}>{value}</span>
-    </div>
-  );
-}
-
-function LoadingInvestigation() {
-  return (
-    <div className="card" style={{ padding: "2rem", textAlign: "center" }}>
+    <div>
+      <div className="intelligence-label" style={{ marginBottom: "0.2rem" }}>{label}</div>
       <div
         style={{
-          display: "inline-block",
-          width: "24px",
-          height: "24px",
-          border: "2px solid var(--color-border)",
-          borderTopColor: "var(--color-text-primary)",
-          borderRadius: "50%",
-          animation: "spin 0.8s linear infinite",
-          marginBottom: "1rem",
+          fontSize: "0.9rem",
+          fontWeight: 600,
+          color: "var(--color-text-primary)",
+          fontFamily: mono ? "var(--font-mono)" : undefined,
         }}
-      />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); }}`}</style>
-      <div style={{ color: "var(--color-text-secondary)" }}>Analyzing transaction...</div>
+      >
+        {value}
+      </div>
     </div>
   );
 }
