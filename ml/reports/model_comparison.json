@@ -1,0 +1,41 @@
+[
+  {
+    "model": "Logistic Regression",
+    "set": "LR-Val",
+    "precision": 0.0681,
+    "recall": 0.9189,
+    "f1": 0.1269,
+    "pr_auc": 0.752,
+    "roc_auc": 0.9859,
+    "true_negatives": 41717,
+    "false_positives": 930,
+    "false_negatives": 6,
+    "true_positives": 68
+  },
+  {
+    "model": "Random Forest",
+    "set": "RF-Val",
+    "precision": 0.8101,
+    "recall": 0.8649,
+    "f1": 0.8366,
+    "pr_auc": 0.8589,
+    "roc_auc": 0.9825,
+    "true_negatives": 42632,
+    "false_positives": 15,
+    "false_negatives": 10,
+    "true_positives": 64
+  },
+  {
+    "model": "XGBoost",
+    "set": "XGB-Val",
+    "precision": 0.8986,
+    "recall": 0.8378,
+    "f1": 0.8671,
+    "pr_auc": 0.8765,
+    "roc_auc": 0.9882,
+    "true_negatives": 42640,
+    "false_positives": 7,
+    "false_negatives": 12,
+    "true_positives": 62
+  }
+]
