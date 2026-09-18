@@ -143,24 +143,44 @@ export interface SamplesResponse {
 
 async function apiFetch<T>(
   path: string,
-  options?: RequestInit
+  options?: RequestInit,
+  timeoutMs: number = 15000
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!res.ok) {
-    const errorBody = await res.text();
-    let detail = errorBody;
-    try {
-      const parsed = JSON.parse(errorBody);
-      detail = parsed.detail || errorBody;
-    } catch {}
-    throw new Error(`API error ${res.status}: ${detail}`);
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      ...options,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errorBody = await res.text();
+      let detail = errorBody;
+      try {
+        const parsed = JSON.parse(errorBody);
+        detail = parsed.detail || errorBody;
+      } catch {}
+      throw new Error(`API error ${res.status}: ${detail}`);
+    }
+
+    return res.json() as Promise<T>;
+  } catch (err: unknown) {
+    clearTimeout(timeoutId);
+    if (err instanceof Error) {
+      if (err.name === "AbortError") {
+        throw new Error("Analysis timed out. Please retry.");
+      }
+      if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+        throw new Error("Unable to connect to FraudLens AI service. Please check System Health.");
+      }
+    }
+    throw err;
   }
-
-  return res.json() as Promise<T>;
 }
 
 // ── API functions ──────────────────────────────────────────────────────────────
@@ -184,5 +204,14 @@ export const api = {
 
   modelInfo: () => apiFetch<ModelInfoResponse>("/model-info"),
 
-  samples: () => apiFetch<SamplesResponse>("/samples"),
+  samples: async (): Promise<SamplesResponse> => {
+    try {
+      return await apiFetch<SamplesResponse>("/samples");
+    } catch {
+      // Fallback to static sample file in public folder (same genuine dataset samples)
+      const res = await fetch("/sample_transactions.json");
+      if (!res.ok) throw new Error("Could not load sample transactions");
+      return res.json() as Promise<SamplesResponse>;
+    }
+  },
 };

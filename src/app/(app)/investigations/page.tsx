@@ -22,6 +22,30 @@ export default function InvestigationsPage() {
 
   useEffect(() => {
     api.samples().then(setSamples).catch(console.error);
+
+    try {
+      const stored = sessionStorage.getItem("fraudlens_investigation_txn");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.result) {
+          setResult(parsed.result);
+          setSelected(parsed.datasetLabel === "FRAUD" ? "fraud" : "legitimate");
+          const t0 = new Date(parsed.timestamp || Date.now());
+          const fmt = (d: Date) =>
+            d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+          setTimestamps([
+            fmt(t0),
+            fmt(new Date(t0.getTime() + 50)),
+            fmt(new Date(t0.getTime() + 180)),
+            fmt(new Date(t0.getTime() + 250)),
+            fmt(new Date(t0.getTime() + 320)),
+          ]);
+          sessionStorage.removeItem("fraudlens_investigation_txn");
+        }
+      }
+    } catch (err) {
+      console.error("Failed to restore investigation", err);
+    }
   }, []);
 
   const investigate = useCallback(

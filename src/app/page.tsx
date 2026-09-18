@@ -263,32 +263,121 @@ function FeatureCard({
   );
 }
 
-/* ─── Stats row ────────────────────────────────────────────────────────────── */
-function StatItem({ value, label }: { value: string; label: string }) {
+/* ─── Hero Stats Carousel Data & Component ─────────────────────────────────── */
+const STATS_ITEMS = [
+  {
+    value: "284K*",
+    label: "Transactions analyzed",
+    accent: null,
+  },
+  {
+    value: "0.17%",
+    label: "Fraud rate detected",
+    accent: "crimson",
+  },
+  {
+    value: "284,807",
+    label: "Transactions analyzed",
+    accent: null,
+  },
+  {
+    value: "XGBoost",
+    label: "Model architecture",
+    accent: "amber",
+  },
+  {
+    value: "492",
+    label: "Fraud signals detected",
+    accent: "crimson",
+  },
+  {
+    value: "Decision threshold",
+    label: "Model risk calibration",
+    accent: null,
+  },
+  {
+    value: "SHAP",
+    label: "Explainability engine",
+    accent: "green",
+  },
+];
+
+function StatsCarouselCard({ item }: { item: (typeof STATS_ITEMS)[0] }) {
+  const isCrimson = item.accent === "crimson";
+  const isAmber = item.accent === "amber";
+  const isGreen = item.accent === "green";
+
+  const dotColor = isCrimson
+    ? "var(--color-brand)"
+    : isAmber
+    ? "var(--color-risk-review)"
+    : isGreen
+    ? "var(--color-risk-low)"
+    : "var(--color-border-strong)";
+
   return (
-    <div style={{ textAlign: "center" }}>
+    <div
+      className="stats-carousel-card"
+      style={{
+        borderColor: isCrimson ? "var(--color-brand-border)" : undefined,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+        <span
+          style={{
+            width: "7px",
+            height: "7px",
+            borderRadius: "50%",
+            background: dotColor,
+            flexShrink: 0,
+            boxShadow: isCrimson ? "0 0 0 2px var(--color-brand-dim)" : undefined,
+          }}
+        />
+        <span
+          style={{
+            fontSize: "1.0625rem",
+            fontWeight: 800,
+            color: isCrimson ? "var(--color-brand)" : "var(--color-text-primary)",
+            letterSpacing: "-0.02em",
+            fontVariantNumeric: "tabular-nums",
+            lineHeight: 1.2,
+          }}
+        >
+          {item.value}
+        </span>
+      </div>
+
       <div
         style={{
-          fontSize: "2rem",
-          fontWeight: 800,
-          color: "var(--color-text-primary)",
-          letterSpacing: "-0.04em",
-          fontVariantNumeric: "tabular-nums",
-          lineHeight: 1,
+          width: "1px",
+          height: "18px",
+          background: "var(--color-border)",
+          flexShrink: 0,
         }}
-      >
-        {value}
-      </div>
-      <div
+      />
+
+      <span
         style={{
           fontSize: "0.8125rem",
-          color: "var(--color-text-secondary)",
-          marginTop: "0.375rem",
           fontWeight: 500,
+          color: "var(--color-text-secondary)",
+          letterSpacing: "-0.01em",
+          lineHeight: 1.3,
         }}
       >
-        {label}
-      </div>
+        {item.label}
+      </span>
+
+      <span
+        style={{
+          color: "var(--color-text-tertiary)",
+          fontSize: "0.75rem",
+          opacity: 0.6,
+          marginLeft: "0.125rem",
+        }}
+      >
+        →
+      </span>
     </div>
   );
 }
@@ -299,8 +388,6 @@ export default function LandingPage() {
   useEffect(() => setMounted(true), []);
 
   const heroRef = useRef(null);
-  const statsRef = useRef(null);
-  const statsInView = useInView(statsRef, { once: true });
 
   const features = [
     {
@@ -342,12 +429,14 @@ export default function LandingPage() {
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
       <section
         ref={heroRef}
+        className="hero-section"
         style={{
-          minHeight: "100vh",
+          minHeight: "calc(100vh - 80px)",
           display: "flex",
           flexDirection: "column",
           position: "relative",
           overflow: "hidden",
+          paddingBottom: "1.5rem",
         }}
       >
         {/* Grid background */}
@@ -355,6 +444,7 @@ export default function LandingPage() {
 
         {/* Navigation bar */}
         <nav
+          className="hero-nav"
           style={{
             position: "relative",
             zIndex: 2,
@@ -419,6 +509,7 @@ export default function LandingPage() {
 
         {/* Hero content */}
         <div
+          className="hero-content-grid"
           style={{
             flex: 1,
             display: "grid",
@@ -426,7 +517,7 @@ export default function LandingPage() {
             maxWidth: "1280px",
             margin: "0 auto",
             width: "100%",
-            padding: "0 2.5rem",
+            padding: "3.5rem 2.5rem 3rem",
             gap: "4rem",
             alignItems: "center",
             position: "relative",
@@ -492,25 +583,6 @@ export default function LandingPage() {
                   <Link href="/model" className="btn btn-secondary btn-xl">
                     Explore Model Intelligence
                   </Link>
-                </div>
-
-                {/* Quick stats */}
-                <div
-                  style={{
-                    marginTop: "3rem",
-                    display: "flex",
-                    gap: "2.5rem",
-                    paddingTop: "2rem",
-                    borderTop: "1px solid var(--color-border)",
-                  }}
-                >
-                  {[
-                    { value: "284K+", label: "Transactions analyzed" },
-                    { value: "0.17%", label: "Fraud rate detected" },
-                    { value: "XGBoost", label: "Model architecture" },
-                  ].map((s) => (
-                    <StatItem key={s.label} value={s.value} label={s.label} />
-                  ))}
                 </div>
               </motion.div>
             )}
@@ -614,56 +686,25 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Stats band ─────────────────────────────────────────────────────── */}
+      {/* ── Hero Stats Carousel ─────────────────────────────────────────────── */}
       <section
-        ref={statsRef}
-        style={{
-          borderTop: "1px solid var(--color-border)",
-          borderBottom: "1px solid var(--color-border)",
-          background: "var(--color-surface)",
-          padding: "2.5rem",
-        }}
+        className="stats-carousel-section"
+        aria-label="Platform Statistics Carousel"
       >
-        <div
-          style={{
-            maxWidth: "960px",
-            margin: "0 auto",
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: "2rem",
-          }}
-        >
-          {[
-            { value: "284,807", label: "Transactions analyzed" },
-            { value: "492", label: "Fraud signals detected" },
-            { value: "83%", label: "Decision threshold" },
-            { value: "SHAP", label: "Explainability engine" },
-          ].map((s, i) => (
-            <motion.div
-              key={s.label}
-              initial={{ opacity: 0, y: 16 }}
-              animate={statsInView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.5, delay: i * 0.08 }}
-              style={{ textAlign: "center" }}
-            >
-              <div
-                style={{
-                  fontSize: "1.875rem",
-                  fontWeight: 800,
-                  color: "var(--color-text-primary)",
-                  letterSpacing: "-0.035em",
-                  fontVariantNumeric: "tabular-nums",
-                  lineHeight: 1,
-                  marginBottom: "0.5rem",
-                }}
-              >
-                {s.value}
-              </div>
-              <div style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", fontWeight: 500 }}>
-                {s.label}
-              </div>
-            </motion.div>
-          ))}
+        <div className="stats-carousel-fade-left" />
+        <div className="stats-carousel-fade-right" />
+
+        <div className="stats-carousel-track">
+          <div className="stats-carousel-group">
+            {STATS_ITEMS.map((item, i) => (
+              <StatsCarouselCard key={`group1-${i}`} item={item} />
+            ))}
+          </div>
+          <div className="stats-carousel-group" aria-hidden="true">
+            {STATS_ITEMS.map((item, i) => (
+              <StatsCarouselCard key={`group2-${i}`} item={item} />
+            ))}
+          </div>
         </div>
       </section>
 
