@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+import os
 from typing import Any
 
 import joblib
@@ -14,7 +15,28 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-MODELS_DIR = Path(__file__).resolve().parents[3] / "backend" / "models"
+
+def _find_models_dir() -> Path:
+    """
+    Robustly locate backend/models directory regardless of working directory
+    or deployment root path (e.g. Render root directory set to repo or 'backend').
+    """
+    this_file = Path(__file__).resolve()
+    candidates = [
+        Path(os.environ["MODELS_DIR"]) if "MODELS_DIR" in os.environ else None,
+        this_file.parents[2] / "models" if len(this_file.parents) > 2 else None,
+        this_file.parents[3] / "backend" / "models" if len(this_file.parents) > 3 else None,
+        Path.cwd() / "backend" / "models",
+        Path.cwd() / "models",
+    ]
+    for candidate in candidates:
+        if candidate and candidate.is_dir() and (candidate / "fraud_model.joblib").exists():
+            return candidate
+    # Fallback to direct parent
+    return this_file.parents[2] / "models"
+
+
+MODELS_DIR = _find_models_dir()
 
 # Features (must match training order)
 V_FEATURES = [f"V{i}" for i in range(1, 29)]
@@ -33,28 +55,45 @@ class ModelArtifacts:
         self.loaded: bool = False
         self.load_error: str | None = None
         self._explainer: Any = None
+        self.models_dir: Path = MODELS_DIR
+
+    @property
+    def is_ready(self) -> bool:
+        """Check if all components are initialized and ready for prediction."""
+        return self.loaded and self.model is not None and self.preprocessing_pipeline is not None
 
     def load(self) -> bool:
         """Load all artifacts from disk. Returns True on success."""
         try:
+            self.models_dir = _find_models_dir()
+            log.info("Resolving model artifacts from: %s", self.models_dir)
+
+            model_file = self.models_dir / "fraud_model.joblib"
+            pipeline_file = self.models_dir / "preprocessing_pipeline.joblib"
+            metadata_file = self.models_dir / "model_metadata.json"
+            threshold_file = self.models_dir / "threshold_analysis.json"
+            samples_file = self.models_dir / "sample_transactions.json"
+
+            for required_file in [model_file, pipeline_file, metadata_file, threshold_file, samples_file]:
+                if not required_file.is_file():
+                    raise FileNotFoundError(f"Missing required model artifact file: {required_file.name}")
+
             log.info("Loading preprocessing pipeline...")
-            self.preprocessing_pipeline = joblib.load(
-                MODELS_DIR / "preprocessing_pipeline.joblib"
-            )
+            self.preprocessing_pipeline = joblib.load(pipeline_file)
 
             log.info("Loading trained model...")
-            self.model = joblib.load(MODELS_DIR / "fraud_model.joblib")
+            self.model = joblib.load(model_file)
 
             log.info("Loading metadata...")
-            with open(MODELS_DIR / "model_metadata.json") as f:
+            with open(metadata_file, "r", encoding="utf-8") as f:
                 self.metadata = json.load(f)
 
             log.info("Loading threshold analysis...")
-            with open(MODELS_DIR / "threshold_analysis.json") as f:
+            with open(threshold_file, "r", encoding="utf-8") as f:
                 self.threshold_analysis = json.load(f)
 
             log.info("Loading sample transactions...")
-            with open(MODELS_DIR / "sample_transactions.json") as f:
+            with open(samples_file, "r", encoding="utf-8") as f:
                 self.sample_transactions = json.load(f)
 
             self.loaded = True
@@ -71,7 +110,7 @@ class ModelArtifacts:
                 self._explainer = None
 
             log.info(
-                "Model artifacts loaded: %s v%s",
+                "Model artifacts loaded successfully: %s v%s",
                 self.metadata.get("model_name"),
                 self.metadata.get("model_version"),
             )
@@ -80,7 +119,7 @@ class ModelArtifacts:
         except Exception as e:
             self.loaded = False
             self.load_error = str(e)
-            log.error("Failed to load model artifacts: %s", e)
+            log.error("Failed to load model artifacts from %s: %s", self.models_dir, e)
             return False
 
     @property

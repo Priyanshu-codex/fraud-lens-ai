@@ -133,6 +133,32 @@ class HealthResponse(BaseModel):
     database_connected: bool = True
     preprocessing_loaded: bool = True
     shap_ready: bool = True
+    uptime_seconds: float | None = None
+    database_configured: bool = True
+
+
+class ReadyResponse(BaseModel):
+    ready: bool
+    status: str
+    model: str
+    model_version: str
+    model_name: str
+    threshold: float
+    timestamp: str
+
+
+class ModelHealthResponse(BaseModel):
+    status: str
+    model_loaded: bool
+    model_name: str
+    model_version: str
+    threshold: float
+    feature_count: int
+    features: list[str] = []
+    shap_ready: bool = True
+    timestamp: str
+    load_error: str | None = None
+
 
 
 class AnalyticsResponse(BaseModel):

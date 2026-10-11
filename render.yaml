@@ -1,0 +1,47 @@
+# ==============================================================================
+# FraudLens AI — Render Blueprint Configuration (render.yaml)
+# Persistent Always-On FastAPI Backend Hosting
+# ==============================================================================
+# IMPORTANT: Deploy this web service on Render Starter plan ($7/mo) or higher.
+# The Free tier spins down after 15 minutes of inactivity and causes 60s+ cold starts
+# or complete downtime when monthly free hours expire.
+# Starter plan guarantees:
+# - Persistent always-on Python process (never sleeps)
+# - Automatic restart on failure / health check probe timeout
+# - 512 MB RAM / 0.5 CPU (ideal for single-worker XGBoost + SHAP inference)
+# - Zero cold-start latency when opening the frontend
+# ==============================================================================
+
+services:
+  - type: web
+    name: fraudlens-api
+    runtime: python
+    plan: starter
+    region: oregon
+    autoDeploy: true
+    
+    # Build and Start Commands
+    buildCommand: pip install --no-cache-dir -r backend/requirements.txt
+    startCommand: python backend/start.py
+    
+    # Health check for liveness & automatic recovery
+    # Render monitors this endpoint and automatically restarts the process if unhealthy
+    healthCheckPath: /health
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: WORKERS
+        value: 1
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: CORS_ORIGIN_REGEX
+        value: ^https:\/\/.*\.vercel\.app$

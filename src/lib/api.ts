@@ -172,6 +172,31 @@ export interface HealthResponse {
   database_connected?: boolean;
   preprocessing_loaded?: boolean;
   shap_ready?: boolean;
+  uptime_seconds?: number | null;
+  database_configured?: boolean;
+}
+
+export interface ReadyResponse {
+  ready: boolean;
+  status: string;
+  model: string;
+  model_version: string;
+  model_name: string;
+  threshold: number;
+  timestamp: string;
+}
+
+export interface ModelHealthResponse {
+  status: string;
+  model_loaded: boolean;
+  model_name: string;
+  model_version: string;
+  threshold: number;
+  feature_count: number;
+  features: string[];
+  shap_ready: boolean;
+  timestamp: string;
+  load_error?: string | null;
 }
 
 export interface AnalyticsResponse {
@@ -245,11 +270,20 @@ export interface SamplesResponse {
 
 // ── Fetch helpers ──────────────────────────────────────────────────────────────
 
+/**
+ * Executes an HTTP fetch with timeout and bounded automatic retry for safe GET requests.
+ * Mutating requests (POST, PATCH, PUT, DELETE) are NEVER retried automatically to prevent duplicate state.
+ */
 async function apiFetch<T>(
   path: string,
   options?: RequestInit,
-  timeoutMs: number = 15000
+  timeoutMs: number = 15000,
+  retryCount: number = 0
 ): Promise<T> {
+  const method = (options?.method || "GET").toUpperCase();
+  const isSafeMethod = method === "GET" || method === "HEAD";
+  const maxRetries = isSafeMethod ? 1 : 0; // Only retry idempotent requests once
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -271,17 +305,47 @@ async function apiFetch<T>(
       let detail = errorBody;
       try {
         const parsed = JSON.parse(errorBody);
-        detail = parsed.detail || errorBody;
+        detail = parsed.detail || parsed.error || errorBody;
       } catch {}
-      throw new Error(`API error ${res.status}: ${detail}`);
+
+      if (res.status === 503) {
+        throw new ApiError(
+          "FraudLens AI service is currently initializing. Please retry in a few seconds.",
+          503
+        );
+      }
+      throw new ApiError(`API error ${res.status}: ${detail}`, res.status);
     }
 
-    return res.json() as Promise<T>;
+    return (await res.json()) as T;
   } catch (err: unknown) {
     clearTimeout(timeoutId);
+
+    // Controlled automatic retry for transient network failures on safe GET requests
+    if (
+      isSafeMethod &&
+      retryCount < maxRetries &&
+      err instanceof Error &&
+      (err.name === "AbortError" ||
+        err.message.includes("Failed to fetch") ||
+        err.message.includes("NetworkError") ||
+        err.message.includes("Load failed"))
+    ) {
+      await new Promise((r) => setTimeout(r, 1000));
+      return apiFetch<T>(path, options, timeoutMs, retryCount + 1);
+    }
+
+    if (err instanceof ApiError) {
+      throw err;
+    }
+
     if (err instanceof Error) {
       if (err.name === "AbortError") {
-        throw new Error("Analysis timed out. Please retry.");
+        throw new ApiError(
+          "Analysis request timed out. The backend service may be starting up or under heavy load. Please retry.",
+          408,
+          true
+        );
       }
       if (
         err.message.includes("Failed to fetch") ||
@@ -297,8 +361,10 @@ async function apiFetch<T>(
           isDeployed && !hasEnv
             ? " (NEXT_PUBLIC_API_URL environment variable is not configured on Vercel)"
             : "";
-        throw new Error(
-          `Unable to connect to FraudLens AI service${hint}. Please check System Health.`
+        throw new ApiError(
+          `Unable to connect to FraudLens AI service${hint}. Please check System Health.`,
+          0,
+          true
         );
       }
     }
@@ -314,23 +380,35 @@ let samplesCache: Promise<SamplesResponse> | null = null;
 // ── API functions ──────────────────────────────────────────────────────────────
 
 export const api = {
-  health: () => apiFetch<HealthResponse>("/health"),
+  health: () => apiFetch<HealthResponse>("/health", undefined, 8000),
+
+  ready: () => apiFetch<ReadyResponse>("/ready", undefined, 8000),
+
+  modelHealth: () => apiFetch<ModelHealthResponse>("/health/model", undefined, 8000),
 
   predict: (transaction: TransactionInput) =>
-    apiFetch<PredictionResponse>("/predict", {
-      method: "POST",
-      body: JSON.stringify(transaction),
-    }),
+    apiFetch<PredictionResponse>(
+      "/predict",
+      {
+        method: "POST",
+        body: JSON.stringify(transaction),
+      },
+      25000
+    ),
 
   explain: (transaction: TransactionInput) =>
-    apiFetch<ExplainResponse>("/explain", {
-      method: "POST",
-      body: JSON.stringify(transaction),
-    }),
+    apiFetch<ExplainResponse>(
+      "/explain",
+      {
+        method: "POST",
+        body: JSON.stringify(transaction),
+      },
+      25000
+    ),
 
   analytics: (force = false): Promise<AnalyticsResponse> => {
     if (!analyticsCache || force) {
-      analyticsCache = apiFetch<AnalyticsResponse>("/analytics").catch((err) => {
+      analyticsCache = apiFetch<AnalyticsResponse>("/analytics", undefined, 15000).catch((err) => {
         analyticsCache = null;
         throw err;
       });
@@ -340,7 +418,7 @@ export const api = {
 
   modelInfo: (force = false): Promise<ModelInfoResponse> => {
     if (!modelInfoCache || force) {
-      modelInfoCache = apiFetch<ModelInfoResponse>("/model-info").catch((err) => {
+      modelInfoCache = apiFetch<ModelInfoResponse>("/model-info", undefined, 15000).catch((err) => {
         modelInfoCache = null;
         throw err;
       });
@@ -352,7 +430,7 @@ export const api = {
     if (!samplesCache || force) {
       samplesCache = (async () => {
         try {
-          return await apiFetch<SamplesResponse>("/samples");
+          return await apiFetch<SamplesResponse>("/samples", undefined, 15000);
         } catch {
           // Fallback to static sample file in public folder (same genuine dataset samples)
           const res = await fetch("/sample_transactions.json");
@@ -369,40 +447,57 @@ export const api = {
 
   listInvestigations: (status?: string, limit: number = 50) =>
     apiFetch<InvestigationRecord[]>(
-      `/investigations${status ? `?status=${status}&limit=${limit}` : `?limit=${limit}`}`
+      `/investigations${status ? `?status=${status}&limit=${limit}` : `?limit=${limit}`}`,
+      undefined,
+      15000
     ),
 
   getInvestigation: (id: string) =>
-    apiFetch<InvestigationRecord>(`/investigations/${id}`),
+    apiFetch<InvestigationRecord>(`/investigations/${id}`, undefined, 15000),
 
   getInvestigationByAnalysis: (analysisId: string) =>
-    apiFetch<InvestigationRecord>(`/investigations/by-analysis/${analysisId}`),
+    apiFetch<InvestigationRecord>(`/investigations/by-analysis/${analysisId}`, undefined, 15000),
 
   updateInvestigation: (id: string, update: InvestigationUpdateInput) =>
-    apiFetch<InvestigationRecord>(`/investigations/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(update),
-    }),
+    apiFetch<InvestigationRecord>(
+      `/investigations/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(update),
+      },
+      20000
+    ),
 
   listAnalyses: (limit: number = 50) =>
-    apiFetch<AnalysisDetail[]>(`/analyses?limit=${limit}`),
+    apiFetch<AnalysisDetail[]>(`/analyses?limit=${limit}`, undefined, 15000),
 
   getAnalysis: (id: string) =>
-    apiFetch<AnalysisDetail>(`/analyses/${id}`),
+    apiFetch<AnalysisDetail>(`/analyses/${id}`, undefined, 15000),
 
   listNotifications: (unreadOnly?: boolean, limit: number = 50) =>
     apiFetch<NotificationListResponse>(
-      `/notifications${unreadOnly ? `?unread_only=true&limit=${limit}` : `?limit=${limit}`}`
+      `/notifications${unreadOnly ? `?unread_only=true&limit=${limit}` : `?limit=${limit}`}`,
+      undefined,
+      15000
     ),
 
   markNotificationAsRead: (id: string) =>
-    apiFetch<NotificationItem>(`/notifications/${id}/read`, {
-      method: "PATCH",
-    }),
+    apiFetch<NotificationItem>(
+      `/notifications/${id}/read`,
+      {
+        method: "PATCH",
+      },
+      15000
+    ),
 
   markAllNotificationsAsRead: () =>
-    apiFetch<{ status: string; marked_count: number }>("/notifications/mark-all-read", {
-      method: "POST",
-    }),
+    apiFetch<{ status: string; marked_count: number }>(
+      "/notifications/mark-all-read",
+      {
+        method: "POST",
+      },
+      15000
+    ),
 };
+
 

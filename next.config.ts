@@ -21,7 +21,23 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    const backendUrl = process.env.BACKEND_URL?.trim();
+    if (backendUrl) {
+      const cleanUrl = backendUrl.replace(/\/+$/, "");
+      return [
+        {
+          source: "/api/:path*",
+          destination: cleanUrl.endsWith("/api")
+            ? `${cleanUrl}/:path*`
+            : `${cleanUrl}/api/:path*`,
+        },
+      ];
+    }
+    return [];
+  },
   async headers() {
+
     return [
       {
         source: "/(.*)",

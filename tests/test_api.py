@@ -41,17 +41,55 @@ class TestHealth:
         resp = client.get("/api/health")
         assert resp.status_code == 200
 
+    def test_health_root_returns_200(self, client):
+        resp = client.get("/health")
+        assert resp.status_code == 200
+
     def test_health_has_required_fields(self, client):
         data = client.get("/api/health").json()
         assert "status" in data
         assert "model_loaded" in data
         assert "model_version" in data
         assert "timestamp" in data
+        assert "api" in data
+        assert "preprocessing" in data
 
     def test_health_model_loaded(self, client):
         data = client.get("/api/health").json()
         assert data["model_loaded"] is True
         assert data["status"] == "ok"
+
+    def test_ready_endpoint_returns_200(self, client):
+        resp = client.get("/ready")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ready"] is True
+        assert data["status"] == "ready"
+        assert data["model"] == "ready"
+        assert "threshold" in data
+
+    def test_api_ready_endpoint_returns_200(self, client):
+        resp = client.get("/api/ready")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ready"] is True
+
+    def test_model_health_endpoint_returns_200(self, client):
+        resp = client.get("/health/model")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["model_loaded"] is True
+        assert data["model_name"] == "XGBoost"
+        assert data["feature_count"] == 30
+        assert data["shap_ready"] is True
+        assert len(data["features"]) == 30
+
+    def test_api_model_health_endpoint_returns_200(self, client):
+        resp = client.get("/api/health/model")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["model_loaded"] is True
+
 
 
 class TestPredict:
@@ -198,3 +236,34 @@ class TestThreshold:
             assert prediction == "FRAUD"
         else:
             assert prediction == "LEGITIMATE"
+
+
+class TestReadinessFailure:
+    def test_ready_and_model_health_return_503_when_not_loaded(self, client, monkeypatch):
+        """Verify readiness probe returns 503 Service Unavailable when model is uninitialized."""
+        from app.ml.loader import artifacts
+        original_loaded = artifacts.loaded
+        try:
+            artifacts.loaded = False
+            # /ready should return 503
+            resp = client.get("/ready")
+            assert resp.status_code == 503
+            data = resp.json()
+            assert data["ready"] is False
+            assert data["status"] == "initializing"
+
+            # /health/model should return 503
+            resp_m = client.get("/health/model")
+            assert resp_m.status_code == 503
+            data_m = resp_m.json()
+            assert data_m["model_loaded"] is False
+
+            # /health (liveness) should still return 200 with degraded status
+            resp_h = client.get("/health")
+            assert resp_h.status_code == 200
+            data_h = resp_h.json()
+            assert data_h["status"] == "degraded"
+            assert data_h["model_loaded"] is False
+        finally:
+            artifacts.loaded = original_loaded
+

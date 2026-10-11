@@ -12,11 +12,30 @@ interface HeaderProps {
 
 export function Header({ title, description, onMenuToggle }: HeaderProps) {
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [error, setError] = useState(false);
+  const [connectionState, setConnectionState] = useState<
+    "connecting" | "connected" | "degraded" | "temporarily_unavailable"
+  >("connecting");
   const [time, setTime] = useState("");
 
+  const checkHealth = async (isRetry = false) => {
+    if (!isRetry) setConnectionState("connecting");
+    try {
+      const res = await api.health();
+      setHealth(res);
+      setConnectionState(res.status === "ok" ? "connected" : "degraded");
+    } catch {
+      setConnectionState("temporarily_unavailable");
+      // If initial check fails, auto-retry once after 3s in case backend was finishing startup
+      if (!isRetry) {
+        setTimeout(() => {
+          checkHealth(true);
+        }, 3000);
+      }
+    }
+  };
+
   useEffect(() => {
-    api.health().then(setHealth).catch(() => setError(true));
+    checkHealth();
   }, []);
 
   useEffect(() => {
@@ -34,6 +53,7 @@ export function Header({ title, description, onMenuToggle }: HeaderProps) {
     const t = setInterval(update, 1000);
     return () => clearInterval(t);
   }, []);
+
 
   return (
     <header
@@ -125,11 +145,12 @@ export function Header({ title, description, onMenuToggle }: HeaderProps) {
         )}
 
         {/* Status pills */}
-        {health !== null ? (
+        {connectionState === "connected" && health !== null ? (
           <>
             <StatusPill
               label="API"
-              status={health.status === "ok" ? "connected" : "degraded"}
+              status="connected"
+              onClick={() => checkHealth(true)}
             />
             <StatusPill
               label="Model"
@@ -137,10 +158,27 @@ export function Header({ title, description, onMenuToggle }: HeaderProps) {
               modelName={health.model_loaded ? health.model_name : undefined}
             />
           </>
-        ) : error ? (
-          <StatusPill label="API" status="error" />
+        ) : connectionState === "degraded" && health !== null ? (
+          <>
+            <StatusPill
+              label="API"
+              status="degraded"
+              onClick={() => checkHealth(true)}
+            />
+            <StatusPill
+              label="Model"
+              status={health.model_loaded ? "ready" : "offline"}
+              modelName={health.model_loaded ? health.model_name : undefined}
+            />
+          </>
+        ) : connectionState === "connecting" ? (
+          <StatusPill label="API" status="connecting" />
         ) : (
-          <div className="skeleton" style={{ width: "130px", height: "22px" }} />
+          <StatusPill
+            label="API"
+            status="temporarily_unavailable"
+            onClick={() => checkHealth(true)}
+          />
         )}
       </div>
 
@@ -157,22 +195,29 @@ function StatusPill({
   label,
   status,
   modelName,
+  onClick,
 }: {
   label: string;
   status: string;
   modelName?: string;
+  onClick?: () => void;
 }) {
   const configs: Record<string, { color: string; bg: string; dot: string; text: string }> = {
-    connected: { color: "var(--color-risk-low)", bg: "var(--color-risk-low-bg)", dot: "var(--color-risk-low)", text: "OK" },
+    connected: { color: "var(--color-risk-low)", bg: "var(--color-risk-low-bg)", dot: "var(--color-risk-low)", text: "CONNECTED" },
     ready:     { color: "var(--color-risk-low)", bg: "var(--color-risk-low-bg)", dot: "var(--color-risk-low)", text: "READY" },
+    connecting: { color: "#F59E0B", bg: "rgba(245, 158, 11, 0.12)", dot: "#F59E0B", text: "CONNECTING..." },
     degraded:  { color: "var(--color-risk-review)", bg: "var(--color-risk-review-bg)", dot: "var(--color-risk-review)", text: "DEGRADED" },
     offline:   { color: "var(--color-risk-high)", bg: "var(--color-risk-high-bg)", dot: "var(--color-risk-high)", text: "OFFLINE" },
+    temporarily_unavailable: { color: "var(--color-risk-high)", bg: "var(--color-risk-high-bg)", dot: "var(--color-risk-high)", text: "TEMPORARILY UNAVAILABLE (RETRY)" },
     error:     { color: "var(--color-risk-high)", bg: "var(--color-risk-high-bg)", dot: "var(--color-risk-high)", text: "ERROR" },
   };
   const cfg = configs[status] || configs.error;
 
   return (
     <div
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
       style={{
         display: "flex",
         alignItems: "center",
@@ -186,6 +231,7 @@ function StatusPill({
         color: cfg.color,
         letterSpacing: "0.05em",
         whiteSpace: "nowrap",
+        cursor: onClick ? "pointer" : "default",
       }}
     >
       <div
