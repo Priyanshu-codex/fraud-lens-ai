@@ -49,6 +49,14 @@ class Settings:
 
     # CORS & Frontend URL
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000").strip()
+    CORS_ORIGIN_REGEX: str = os.getenv(
+        "CORS_ORIGIN_REGEX", r"^https:\/\/.*\.vercel\.app$"
+    ).strip()
+
+    # Server Runtime Settings
+    HOST: str = os.getenv("HOST", "0.0.0.0").strip()
+    PORT: int = int(os.getenv("PORT", "8000"))
+    WORKERS: int = int(os.getenv("WORKERS", os.getenv("WEB_CONCURRENCY", "1")))
     
     @property
     def ALLOWED_ORIGINS(self) -> list[str]:
@@ -74,3 +82,4 @@ class Settings:
 
 
 settings = Settings()
+

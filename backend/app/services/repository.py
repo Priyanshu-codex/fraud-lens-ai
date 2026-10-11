@@ -152,8 +152,9 @@ def save_analysis_record(
             "investigation_id": investigation_id,
         }
     except Exception as exc:
-        log.error("Supabase database persistence failed: %s", exc, exc_info=True)
+        log.warning("Supabase database persistence failed: %s (inference unaffected)", exc)
         return None
+
 
 
 def get_recent_analyses(

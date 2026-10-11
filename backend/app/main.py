@@ -9,8 +9,10 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from datetime import datetime, timezone
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .api.health import router as health_router
 from .api.predict import router as predict_router
@@ -34,16 +36,20 @@ log = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load model artifacts and initialize Supabase connection on startup."""
+    app.state.start_time = datetime.now(timezone.utc)
     log.info("FraudLens AI backend starting up...")
     
-    # Verify Supabase database readiness
-    supabase_ok = check_supabase_connection()
-    if supabase_ok:
-        log.info("Supabase PostgreSQL connected successfully.")
-    else:
-        log.info("Supabase operating in offline/unconfigured mode (ML inference remains fully functional).")
+    # Verify Supabase database readiness (non-fatal if offline)
+    try:
+        supabase_ok = check_supabase_connection(force=True)
+        if supabase_ok:
+            log.info("Supabase PostgreSQL connected successfully.")
+        else:
+            log.info("Supabase operating in offline/unconfigured mode (ML inference remains fully functional).")
+    except Exception as db_err:
+        log.warning("Supabase startup check bypassed: %s", db_err)
 
-    # Load ML artifacts
+    # Load ML artifacts once at startup
     success = artifacts.load()
     if success:
         log.info(
@@ -54,8 +60,9 @@ async def lifespan(app: FastAPI):
         )
     else:
         log.error("Model failed to load: %s", artifacts.load_error)
+
     yield
-    log.info("FraudLens AI backend shutting down.")
+    log.info("FraudLens AI backend shutting down gracefully.")
 
 
 app = FastAPI(
@@ -72,11 +79,25 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o for o in settings.ALLOWED_ORIGINS if o],
-    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Ensure unexpected exceptions return structured JSON rather than crashing the process."""
+    log.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "An internal error occurred while processing the request.",
+            "path": request.url.path,
+        },
+    )
+
 
 # Routers — Mounted at both root and /api prefix so all URL configurations resolve cleanly
 routers = [
