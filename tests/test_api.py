@@ -267,3 +267,51 @@ class TestReadinessFailure:
         finally:
             artifacts.loaded = original_loaded
 
+
+class TestVercelEntrypoint:
+    def test_vercel_entrypoint_app_exports(self):
+        """Verify api.index exports a valid FastAPI app instance for @vercel/python."""
+        import api.index as vercel_entry
+        assert hasattr(vercel_entry, "app")
+        assert vercel_entry.app.title == "FraudLens AI"
+
+    def test_vercel_entrypoint_health_endpoints(self):
+        """Verify api.index handles both /health and /api/health."""
+        from fastapi.testclient import TestClient
+        import api.index as vercel_entry
+        with TestClient(vercel_entry.app) as c:
+            resp_root = c.get("/health")
+            assert resp_root.status_code == 200
+            assert resp_root.json()["status"] == "ok"
+
+            resp_api = c.get("/api/health")
+            assert resp_api.status_code == 200
+            assert resp_api.json()["status"] == "ok"
+
+    def test_vercel_entrypoint_predict_and_explain(self, samples):
+        """Verify api.index executes real model inference and SHAP explainability."""
+        from fastapi.testclient import TestClient
+        import api.index as vercel_entry
+        with TestClient(vercel_entry.app) as c:
+            txn = samples["fraud"][0]
+            pred = c.post("/api/predict", json=txn)
+            assert pred.status_code == 200
+            assert pred.json()["prediction"] == "FRAUD"
+            assert pred.json()["fraud_probability"] > 0.9
+
+            expl = c.post("/api/explain", json=txn)
+            assert expl.status_code == 200
+            assert len(expl.json()["top_contributions"]) == 15
+
+    def test_vercel_docs_endpoint(self):
+        """Verify /api/docs and /api/openapi.json return valid schemas."""
+        from fastapi.testclient import TestClient
+        import api.index as vercel_entry
+        with TestClient(vercel_entry.app) as c:
+            docs = c.get("/api/docs")
+            assert docs.status_code == 200
+            openapi = c.get("/api/openapi.json")
+            assert openapi.status_code == 200
+            assert "paths" in openapi.json()
+
+

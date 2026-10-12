@@ -34,8 +34,22 @@ const nextConfig: NextConfig = {
         },
       ];
     }
+    // In local development, proxy /api requests to local uvicorn on port 8000
+    if (process.env.NODE_ENV === "development") {
+      return [
+        {
+          source: "/api",
+          destination: "http://127.0.0.1:8000/api",
+        },
+        {
+          source: "/api/:path*",
+          destination: "http://127.0.0.1:8000/api/:path*",
+        },
+      ];
+    }
     return [];
   },
+
   async headers() {
 
     return [

@@ -50,16 +50,19 @@ async def lifespan(app: FastAPI):
         log.warning("Supabase startup check bypassed: %s", db_err)
 
     # Load ML artifacts once at startup
-    success = artifacts.load()
-    if success:
-        log.info(
-            "Model ready: %s %s (threshold=%.2f)",
-            artifacts.model_name,
-            artifacts.model_version,
-            artifacts.threshold,
-        )
+    if not artifacts.loaded:
+        success = artifacts.load()
+        if success:
+            log.info(
+                "Model ready: %s %s (threshold=%.2f)",
+                artifacts.model_name,
+                artifacts.model_version,
+                artifacts.threshold,
+            )
+        else:
+            log.error("Model failed to load: %s", artifacts.load_error)
     else:
-        log.error("Model failed to load: %s", artifacts.load_error)
+        log.info("Model already initialized in memory.")
 
     yield
     log.info("FraudLens AI backend shutting down gracefully.")
@@ -73,6 +76,7 @@ app = FastAPI(
         "Every prediction comes from a trained XGBoost model with validated threshold."
     ),
     lifespan=lifespan,
+    redirect_slashes=False,
 )
 
 # CORS
@@ -116,6 +120,18 @@ for r in routers:
     app.include_router(r, prefix="/api")
 
 
+@app.get("/api/docs", include_in_schema=False)
+async def api_docs_swagger():
+    from fastapi.openapi.docs import get_swagger_ui_html
+    return get_swagger_ui_html(openapi_url="/api/openapi.json", title=f"{settings.APP_TITLE} - API Docs")
+
+
+@app.get("/api/openapi.json", include_in_schema=False)
+async def api_openapi_json(request: Request):
+    return JSONResponse(app.openapi())
+
+
+@app.get("/api", tags=["Root"])
 @app.get("/", tags=["Root"])
 async def root():
     return {
@@ -123,5 +139,6 @@ async def root():
         "tagline": "See the risk. Understand the reason. Decide with confidence.",
         "status": "running",
         "model_loaded": artifacts.loaded,
-        "docs": "/docs",
+        "docs": "/api/docs",
     }
+
