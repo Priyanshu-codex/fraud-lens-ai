@@ -62,8 +62,10 @@ class ModelArtifacts:
         """Check if all components are initialized and ready for prediction."""
         return self.loaded and self.model is not None and self.preprocessing_pipeline is not None
 
-    def load(self) -> bool:
+    def load(self, force: bool = False) -> bool:
         """Load all artifacts from disk. Returns True on success."""
+        if self.loaded and not force:
+            return True
         try:
             self.models_dir = _find_models_dir()
             log.info("Resolving model artifacts from: %s", self.models_dir)

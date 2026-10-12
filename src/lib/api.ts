@@ -20,14 +20,40 @@ export function getApiBase(): string {
       window.location.hostname === "localhost" ||
       window.location.hostname === "127.0.0.1";
     if (!isLocalhost) {
-      // In production deployment (e.g. Vercel), default to relative /api or custom domain proxy
-      return "";
+      // In production deployment on Vercel, use same-origin relative /api
+      return "/api";
     }
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}/api`;
   }
   return "http://127.0.0.1:8000/api";
 }
 
 export const API_BASE = getApiBase();
+
+/**
+ * Resolves a full, normalized endpoint URL ensuring consistent /api pathing across
+ * local development, preview deployments, and unified Vercel production hosting.
+ */
+export function resolveApiUrl(path: string): string {
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  const base = getApiBase();
+
+  if (base.endsWith("/api")) {
+    if (cleanPath.startsWith("/api/")) {
+      return `${base}${cleanPath.slice(4)}`;
+    }
+    return `${base}${cleanPath}`;
+  }
+
+  if (cleanPath.startsWith("/api/") || cleanPath === "/api") {
+    return `${base}${cleanPath}`;
+  }
+
+  return `${base}/api${cleanPath}`;
+}
+
 
 export class ApiError extends Error {
   status?: number;
@@ -287,9 +313,7 @@ async function apiFetch<T>(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  const base = getApiBase();
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const url = base ? `${base}${normalizedPath}` : normalizedPath;
+  const url = resolveApiUrl(path);
 
   try {
     const res = await fetch(url, {
@@ -352,17 +376,8 @@ async function apiFetch<T>(
         err.message.includes("NetworkError") ||
         err.message.includes("Load failed")
       ) {
-        const isDeployed =
-          typeof window !== "undefined" &&
-          window.location.hostname !== "localhost" &&
-          window.location.hostname !== "127.0.0.1";
-        const hasEnv = Boolean(process.env.NEXT_PUBLIC_API_URL);
-        const hint =
-          isDeployed && !hasEnv
-            ? " (NEXT_PUBLIC_API_URL environment variable is not configured on Vercel)"
-            : "";
         throw new ApiError(
-          `Unable to connect to FraudLens AI service${hint}. Please check System Health.`,
+          "Unable to connect to FraudLens AI service. The API may be starting up or temporarily unreachable. Please retry.",
           0,
           true
         );
@@ -370,6 +385,7 @@ async function apiFetch<T>(
     }
     throw err;
   }
+
 }
 
 // ── Cached promises for static metadata ─────────────────────────────────────
